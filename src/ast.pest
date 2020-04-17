@@ -1,0 +1,54 @@
+resolved_ast = ${
+    (NEWLINE | module)+ ~
+    NEWLINE? ~
+    EOI
+}
+
+module = ${
+    resolved ~
+    (NEWLINE ~ decl)+
+}
+
+resolved = ${ "# " ~ identifier ~ ": " ~ (WHITE_SPACE | ASCII_ALPHANUMERIC)+ ~ "(round " ~ resolved_round ~ ")" }
+identifier = @{ (ASCII_ALPHANUMERIC | "_" | "%" | "-")+ }
+resolved_round = @{ ASCII_DIGIT+ }
+
+decl = ${
+    PUSH(WHITE_SPACE{2}) ~
+    "- " ~ type_ ~ (" %" ~ id)? ~ (" " ~ original)? ~ (" "* ~ properties)? ~ (" " ~ type2)? ~ (" " ~ location)? ~ (" " ~ flag)* ~ ("  " ~ error)* ~
+    (NEWLINE ~ PEEK_ALL ~ WHITE_SPACE{4} ~ scope)* ~
+    (NEWLINE ~ PEEK_ALL ~ decl)* ~
+    DROP
+}
+type_ = @{ identifier ~ ("::" ~ identifier)* }
+id = @{ ASCII_DIGIT+ }
+
+original = ${ "(original %" ~ id ~ ")"}
+
+properties = @{ "<" ~ property ~ (" " ~ property)* ~ ">" }
+property = ${ property_key? ~ "=" ~ property_value? }
+property_key = @{ (identifier | "-")+ }
+property_value = @{ property_value_+ | ("\"" ~ (NEWLINE | WHITE_SPACE | "->" | "\\\"" | "<" | ">" | property_value_)* ~ "\"") }
+property_value_ = _{ (!NEWLINE ~ !WHITE_SPACE ~ !"\"" ~ !"<" ~ !">" ~ ANY) }
+
+type2 = ${"(type: " ~ type2_ ~ ")"}
+type2_ = @{ ((!("(" | ")" | NEWLINE) ~ ANY)+ | ("(" ~ type2_* ~ ")"))+ }
+
+location = ${ "(" ~ file ~ ":" ~ line_number_start ~ (":" ~ column_number_start) ~ ("-" ~ line_number_end ~ (":" ~ column_number_end))? ~ ")" }
+line_number_start = @{ ASCII_DIGIT+ }
+column_number_start = @{ ASCII_DIGIT+ }
+line_number_end = @{ ASCII_DIGIT+ }
+column_number_end = @{ ASCII_DIGIT+ }
+file = @{ (ASCII_ALPHANUMERIC | "/" | ".")+ }
+
+flag = @{ "(" ~ (word | "[" ~ word* ~ "]" | "'" ~ word* ~"'" | "(" ~ word* ~ ")")+ ~ ")" }
+word = _{ (ASCII_ALPHANUMERIC | "_" | "-" | "." | ":" | "&" | "<" | ">" | "%" | "=" | "," | WHITE_SPACE)+ }
+
+error = @{ "[ERROR] " ~ (!NEWLINE ~ ANY)* }
+
+// TODO(bbannier): This is really the same as a decl with `identifier -> `.
+// Introduce a `node` and build both `decl` and `scope` on it.
+scope = ${
+    "| " ~ identifier ~ " -> " ~ type_ ~ (" %" ~ id)? ~ (" " ~ original)? ~ (" " ~ properties)? ~ (" " ~ type2)? ~ (" " ~ flag)* ~ ("  " ~ error)* }
+
+// vim: commentstring=//%s

@@ -1,0 +1,655 @@
+use {
+    crate::{options::Options, pest::Parser},
+    anyhow::{anyhow, Context, Result},
+    pest_derive::Parser,
+    regex::Regex,
+    std::{
+        collections::HashMap,
+        convert::TryFrom,
+        error, fmt,
+        path::PathBuf,
+        process::{Command, Output},
+        result,
+        str::from_utf8,
+    },
+};
+
+pub mod types {
+    use super::*;
+
+    #[derive(Debug, Default, PartialEq, Eq, Clone)]
+    pub struct AST {
+        pub decls: Vec<Decl>,
+    }
+
+    #[derive(Debug, Default, PartialEq, Eq, Clone)]
+    pub struct Decl {
+        pub type_: String,
+        pub id: Option<String>,
+        pub properties: Properties,
+        pub location: Option<Location>,
+        pub flags: Vec<String>,
+        pub decls: Vec<Decl>,
+        pub scope: Vec<Scope>,
+        pub type2: Option<String>,
+        pub original: Option<String>,
+        pub errors: Vec<String>,
+    }
+
+    impl<'a> TryFrom<pest::iterators::Pairs<'a, Rule>> for Decl {
+        type Error = anyhow::Error;
+
+        fn try_from(decl: pest::iterators::Pairs<Rule>) -> Result<Self> {
+            let mut type_ = None;
+            let mut id = None;
+            let mut properties = Properties::default();
+            let mut location = None;
+            let mut flags = vec![];
+            let mut decls = vec![];
+            let mut scope = vec![];
+            let mut type2 = None;
+            let mut original = None;
+            let mut errors = vec![];
+
+            for rule in decl {
+                match rule.as_rule() {
+                    Rule::type_ => type_ = Some(rule.as_str().to_owned()),
+                    Rule::id => id = Some(rule.as_str().to_owned()),
+                    Rule::properties => properties = Properties::try_from(rule.into_inner())?,
+                    Rule::location => location = Some(Location::try_from(rule.into_inner())?),
+                    Rule::flag => flags.push(rule.as_str().to_owned()),
+                    Rule::decl => decls.push(Decl::try_from(rule.into_inner())?),
+                    Rule::scope => scope.push(Scope::try_from(rule.into_inner())?),
+                    Rule::type2 => type2 = Some(rule.into_inner().as_str().into()),
+                    Rule::original => original = Some(rule.into_inner().as_str().into()),
+                    Rule::error => errors.push(rule.into_inner().as_str().into()),
+                    _ => std::unreachable!(format!(
+                        "unexpected child node '{:?}'",
+                        dbg!(rule).as_rule()
+                    )),
+                }
+            }
+
+            Ok(Decl {
+                type_: type_.ok_or_else(|| anyhow!("every decl must have a type"))?,
+                id,
+                properties,
+                location,
+                flags,
+                decls,
+                scope,
+                type2,
+                original,
+                errors,
+            })
+        }
+    }
+
+    #[derive(Debug, Default, PartialEq, Eq, Clone)]
+    pub struct Properties(pub HashMap<String, Option<String>>);
+
+    impl Properties {
+        fn try_from(properties: pest::iterators::Pairs<Rule>) -> Result<Self> {
+            let mut xs = HashMap::new();
+
+            for property in properties {
+                let mut property = property.into_inner();
+
+                let key = property
+                    .next()
+                    .ok_or_else(|| anyhow!("properties need to at least have a key"))?
+                    .as_str()
+                    .to_owned();
+                let value = property.next().map(|v| v.as_str().to_owned());
+
+                xs.insert(key, value);
+            }
+
+            Ok(Self(xs))
+        }
+    }
+
+    #[derive(Debug, Default, PartialEq, Eq, Clone, PartialOrd)]
+    pub struct Position {
+        pub line: u64,
+        pub character: u64,
+    }
+
+    #[derive(Debug, Default, PartialEq, Eq, Clone)]
+    pub struct Location {
+        pub file: String,
+        pub start: Position,
+        pub end: Option<Position>,
+    }
+
+    impl Location {
+        fn try_from(location: pest::iterators::Pairs<Rule>) -> Result<Self> {
+            let mut result = Location {
+                ..Default::default()
+            };
+            for rule in location {
+                match rule.as_rule() {
+                    Rule::file => result.file = rule.as_str().to_owned(),
+                    Rule::line_number_start => result.start.line = rule.as_str().parse()?,
+                    Rule::column_number_start => result.start.character = rule.as_str().parse()?,
+                    Rule::line_number_end => {
+                        result.end = Some(Position {
+                            line: rule.as_str().parse()?,
+                            ..Default::default()
+                        })
+                    }
+                    Rule::column_number_end => {
+                        if let Some(end) = result.end.as_mut() {
+                            end.character = rule.as_str().parse()?
+                        }
+                    }
+                    _ => std::unreachable!(format!(
+                        "unexpected child node '{:?}'",
+                        dbg!(rule).as_rule()
+                    )),
+                }
+            }
+
+            Ok(result)
+        }
+    }
+
+    #[derive(Debug, Default, PartialEq, Eq, Clone)]
+    pub struct Scope {
+        pub identifier: String,
+        pub type_: String,
+        pub id: Option<String>,
+        pub properties: Properties,
+        pub type2: Option<String>,
+        pub flags: Vec<String>,
+        pub original: Option<String>,
+        pub errors: Vec<String>,
+    }
+
+    impl<'a> TryFrom<pest::iterators::Pairs<'a, Rule>> for Scope {
+        type Error = anyhow::Error;
+
+        fn try_from(scope: pest::iterators::Pairs<Rule>) -> Result<Self> {
+            let mut identifier = None;
+            let mut type_ = None;
+            let mut id = None;
+            let mut properties = Properties::default();
+            let mut type2 = None;
+            let mut flags = vec![];
+            let mut original = None;
+            let mut errors = vec![];
+
+            for rule in scope {
+                match rule.as_rule() {
+                    Rule::identifier => identifier = Some(rule.as_str().to_owned()),
+                    Rule::properties => properties = Properties::try_from(rule.into_inner())?,
+                    Rule::type_ => type_ = Some(rule.as_str().to_owned()),
+                    Rule::id => id = Some(rule.as_str().to_owned()),
+                    Rule::flag => flags.push(rule.as_str().to_owned()),
+                    Rule::original => original = Some(rule.into_inner().as_str().into()),
+                    Rule::error => errors.push(rule.into_inner().as_str().into()),
+                    Rule::type2 => type2 = Some(rule.into_inner().as_str().into()),
+                    _ => std::unreachable!(format!(
+                        "unexpected child node '{:?}'",
+                        dbg!(rule).as_rule()
+                    )),
+                }
+            }
+
+            Ok(Scope {
+                identifier: identifier
+                    .ok_or_else(|| anyhow!("every scope must have an identifier"))?,
+                type_: type_.ok_or_else(|| anyhow!("every scope must have a type"))?,
+                id,
+                properties,
+                type2,
+                flags,
+                original,
+                errors,
+            })
+        }
+    }
+
+    pub type ASTs = HashMap<String, AST>;
+}
+
+#[derive(Parser, PartialEq)]
+#[grammar = "ast.pest"]
+struct ASTParser;
+
+#[derive(Debug, PartialEq)]
+struct Spicyc {
+    ast_resolved: String,
+    diagnostics: Vec<SpicycDiagnostics>,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct SpicycDiagnostics {
+    pub file: String,
+    pub position: types::Position,
+    pub message: String,
+}
+
+impl TryFrom<Output> for Spicyc {
+    type Error = anyhow::Error;
+
+    fn try_from(value: Output) -> result::Result<Self, Self::Error> {
+        let stderr = from_utf8(&value.stderr)?;
+
+        let (ast_resolved, other): (Vec<_>, _) = stderr
+            .lines()
+            .partition(|&l| l.starts_with("[debug/ast-resolved] "));
+
+        let ast_resolved = ast_resolved
+            .iter()
+            .map(|l| l[21..].to_owned())
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        let re_error = Regex::new(r"\[error\]\s((?:\w|/|-|\.)+).*:(\d+):(\d+):\s(.*)$")?;
+
+        let diagnostics = other
+            .iter()
+            .filter_map(|&l| {
+                let captures = re_error.captures(&l)?;
+                let file = captures.get(1)?.as_str().into();
+                let line = captures.get(2)?.as_str().parse::<u64>().ok()?;
+                let character = captures.get(3)?.as_str().parse::<u64>().ok()?;
+                let message = captures.get(4)?.as_str().into();
+                Some(SpicycDiagnostics {
+                    file,
+                    position: types::Position { line, character },
+                    message,
+                })
+            })
+            .collect();
+
+        Ok(Spicyc {
+            ast_resolved,
+            diagnostics,
+        })
+    }
+}
+
+// TODO(bbannier): return Spicy errors here.
+fn spicyc(path: &PathBuf, options: &Options) -> Result<Spicyc> {
+    // let output = Command::new(("spicyc"))
+    let output = Command::new(options.spicyc.as_deref().unwrap_or("spicyc"))
+        .arg(&path)
+        .args(&["-p", "-D", "ast-resolved"])
+        .output()
+        .with_context(|| "Could not execute 'spicyc'".to_owned())
+        .expect("");
+
+    Spicyc::try_from(output)
+}
+
+#[derive(Debug)]
+struct IncompleteParseError(String);
+
+impl error::Error for IncompleteParseError {
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
+        // Generic error, underlying cause isn't tracked.
+        None
+    }
+}
+
+impl fmt::Display for IncompleteParseError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+fn parse_rule(input: &str, r: Rule) -> Result<pest::iterators::Pair<Rule>> {
+    let result: pest::iterators::Pair<Rule> = ASTParser::parse(r, &input)?
+        .next()
+        .ok_or_else(|| anyhow!("parse yielded no results"))?;
+
+    // Check if we successfully parsed the input.
+    let unparsed = input
+        .strip_prefix(result.as_str())
+        .ok_or_else(|| IncompleteParseError(input.to_owned()))?;
+    if !unparsed.is_empty() {
+        return Err(IncompleteParseError(unparsed.to_owned()).into());
+    }
+
+    Ok(result)
+}
+
+fn parse_resolved_asts(input: &str) -> Result<types::ASTs> {
+    let result = parse_rule(&input, Rule::resolved_ast)?;
+
+    let mut asts = types::ASTs::new();
+
+    for module in result.into_inner() {
+        let mut ast = None;
+        // let mut ast: Option<&mut types::AST> = None;
+
+        for decl in module.into_inner() {
+            match decl.as_rule() {
+                Rule::resolved => {
+                    let mut inner_rules = decl.into_inner();
+                    let identifier = inner_rules.next().expect("expected node absent").as_str();
+                    let _round = inner_rules.next().expect("expected node absent").as_str();
+
+                    if let Some(xs) = asts.get_mut(identifier) {
+                        *xs = types::AST::default()
+                    } else {
+                        asts.insert(identifier.into(), types::AST::default());
+                    }
+                    ast = Some(
+                        asts.get_mut(identifier)
+                            .ok_or_else(|| anyhow!("AST should be created"))?,
+                    );
+                }
+                Rule::decl => {
+                    ast.as_mut()
+                        .ok_or_else(|| anyhow!("declarations can only appear in an AST"))?
+                        .decls
+                        .push(types::Decl::try_from(decl.into_inner())?);
+                }
+                _ => std::unreachable!(format!(
+                    "unexpected child node '{:?}'",
+                    dbg!(decl).as_rule()
+                )),
+            };
+        }
+    }
+
+    Ok(asts)
+}
+
+pub fn parse(path: &PathBuf, options: &Options) -> Result<(types::ASTs, Vec<SpicycDiagnostics>)> {
+    let result = spicyc(&path, options)?;
+    Ok((
+        parse_resolved_asts(&result.ast_resolved)?,
+        result.diagnostics,
+    ))
+}
+
+#[cfg(test)]
+pub mod test {
+    use {
+        super::*,
+        std::{
+            fs::File,
+            io::{self, BufRead},
+            path::Path,
+        },
+        walkdir::WalkDir,
+    };
+
+    fn data_file(file: &str) -> Option<PathBuf> {
+        Some(
+            Path::new(file!())
+                .parent()?
+                .parent()?
+                .join("data")
+                .join(file),
+        )
+    }
+
+    pub fn spicy_test_file(file: &str) -> Option<PathBuf> {
+        for test in spicy_test_files() {
+            if test.ends_with(file) {
+                return Some(test);
+            }
+        }
+
+        None
+    }
+
+    fn spicy_test_files() -> Vec<PathBuf> {
+        let spicy_test_root = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests");
+        assert!(
+            spicy_test_root.exists(),
+            "expected Spicy 'tests/' directory linked into the project root"
+        );
+
+        WalkDir::new(spicy_test_root)
+            .into_iter()
+            .filter_map(result::Result::ok)
+            .filter(|e| {
+                !e.file_type().is_dir()
+                    && e.path().extension().map_or(None, |ext| ext.to_str()) == Some("spicy")
+            })
+            .filter_map(|e| Some(e.path().to_path_buf()))
+            .filter_map(|e| {
+                if let Some(path) = e.to_str() {
+                    // Filter out BTest temp files.
+                    if path.contains("/.tmp/") {
+                        return None;
+                    }
+
+                    // Filter out input expected to create failures.
+                    if path.ends_with("-fail.spicy") {
+                        return None;
+                    }
+
+                    // Filter out know failures.
+                    if path.ends_with("spicy/types/id/validation.spicy")
+                        || path.ends_with("tests/zeek/lib/protocols/http.spicy")
+                        || path.ends_with("tests/zeek/lib/protocols/dns.spicy")
+                        || path.ends_with("tests/spicy/lib/protocols/http/reply-chunked.spicy")
+                        || path.ends_with("tests/spicy/lib/protocols/http/requests.spicy")
+                        || path.ends_with("tests/spicy/lib/protocols/http/reply-eod.spicy")
+                        || path.ends_with("tests/spicy/lib/protocols/http/reply-multipart.spicy")
+                        || path
+                            .ends_with("tests/spicy/lib/protocols/http/reply-chunked-trailer.spicy")
+                        || path
+                            .ends_with("tests/spicy/lib/protocols/http/reply-content-length.spicy")
+                    {
+                        return None;
+                    }
+                }
+
+                let file = File::open(&e).ok()?;
+                let cannot_parse_standalone = io::BufReader::new(&file).lines().any(|l| {
+                    if let Ok(l) = l {
+                        // Filter out inputs containing raw BTest instructions.
+                        l.starts_with("@") ||
+                            // Filter out inputs containing multiple files (which might depend on
+                            // one another).
+                            l.contains("TEST-START-FILE") || l.contains("TEST-START-NEXT")
+                    } else {
+                        false
+                    }
+                });
+                if cannot_parse_standalone {
+                    return None;
+                }
+
+                Some(e)
+            })
+            .collect::<Vec<_>>()
+    }
+
+    #[test]
+    fn test_spicyc() -> Result<()> {
+        let file = "foo-fail.spicy";
+        let result = spicyc(
+            &data_file(file).ok_or_else(|| anyhow!("could not find data file '{}'", file))?,
+            &Options::default(),
+        )?;
+
+        assert!(
+            result
+                .ast_resolved
+                .lines()
+                .any(|l| l.contains("| Foo -> Module %1")),
+            "unexpected ast: {:?}",
+            &result.ast_resolved[0..3]
+        );
+
+        assert_eq!(
+            result.diagnostics,
+            vec![SpicycDiagnostics {
+                file: "data/foo-fail.spicy".into(),
+                position: types::Position {
+                    line: 3,
+                    character: 7
+                },
+                message: "unknown ID \'a\'".into()
+            }],
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_parse_all() -> Result<()> {
+        let ast_resolved = spicyc(
+            &data_file("foo.spicy").ok_or_else(|| anyhow!("unknown data file 'foo.spicy'"))?,
+            &Options::default(),
+        )?
+        .ast_resolved;
+
+        let result = parse_rule(&ast_resolved, Rule::resolved_ast);
+        assert!(result.is_ok(), format!("{:#?}", result));
+
+        Ok(())
+    }
+
+    #[test]
+    fn parse_module_round1() {
+        let input = concat!(
+            "# Foo: AST after resolving (round 1)\n",
+            "  - Module %1 (foo.spicy:1:1)\n",
+            "      | Foo -> Module %1\n",
+            "    - ID <name=Foo> (foo.spicy:1:1)\n",
+            "    - statement::Block (foo.spicy:1:1)\n",
+        );
+
+        if let Err(err) = parse_rule(&input, Rule::resolved_ast) {
+            assert!(false, format!("{:?}", err));
+        }
+
+        let asts = parse_resolved_asts(&input);
+
+        let expected = {
+            let mut m = types::ASTs::new();
+
+            let decl = types::Decl {
+                type_: "Module".into(),
+                id: Some("1".into()),
+                location: Some(types::Location {
+                    file: "foo.spicy".into(),
+                    start: types::Position {
+                        line: 1,
+                        character: 1,
+                    },
+                    ..Default::default()
+                }),
+                scope: vec![types::Scope {
+                    identifier: "Foo".into(),
+                    type_: "Module".into(),
+                    id: Some("1".into()),
+                    ..Default::default()
+                }],
+                decls: vec![
+                    types::Decl {
+                        type_: "ID".into(),
+                        properties: {
+                            let mut m = HashMap::new();
+                            m.insert("name".into(), Some("Foo".into()));
+                            types::Properties(m)
+                        },
+                        location: Some(types::Location {
+                            file: "foo.spicy".into(),
+                            start: types::Position {
+                                line: 1,
+                                character: 1,
+                            },
+                            ..Default::default()
+                        }),
+                        ..Default::default()
+                    },
+                    types::Decl {
+                        type_: "statement::Block".into(),
+                        location: Some(types::Location {
+                            file: "foo.spicy".into(),
+                            start: types::Position {
+                                line: 1,
+                                character: 1,
+                            },
+                            ..Default::default()
+                        }),
+                        ..Default::default()
+                    },
+                ],
+                ..Default::default()
+            };
+            m.insert("Foo".into(), types::AST { decls: vec![decl] });
+
+            m
+        };
+
+        assert_eq!(asts.ok(), Some(expected));
+    }
+
+    #[test]
+    fn parse_properties() {
+        let input = "<extension=.hlt path= scope=->";
+        let properties = ASTParser::parse(Rule::properties, &input)
+            .unwrap()
+            .next()
+            .unwrap();
+
+        let mut prop_map = HashMap::new();
+        for prop in properties.into_inner() {
+            let kv = prop.into_inner().map(|x| x.as_str()).collect::<Vec<_>>();
+            prop_map.insert(kv[0], if kv.len() == 2 { Some(kv[1]) } else { None });
+        }
+
+        let expected = {
+            let mut m = HashMap::new();
+            m.insert("extension", Some(".hlt"));
+            m.insert("path", None);
+            m.insert("scope", Some("-"));
+            m
+        };
+
+        assert_eq!(prop_map, expected);
+    }
+
+    #[test]
+    fn parse_location() {
+        let input = "(hilti.hlt:2:1)";
+        assert_eq!(
+            &ASTParser::parse(Rule::location, &input)
+                .unwrap()
+                .next()
+                .unwrap()
+                .as_str(),
+            &input
+        );
+
+        let input = "(hilti.hlt:2:1-32:1)";
+        assert_eq!(
+            &ASTParser::parse(Rule::location, &input)
+                .unwrap()
+                .next()
+                .unwrap()
+                .as_str(),
+            &input
+        );
+    }
+
+    #[test]
+    #[ignore]
+    fn spicy_tests() {
+        use rayon::prelude::*;
+
+        spicy_test_files()
+            .par_iter()
+            .try_for_each(|test| {
+                parse(
+                    &spicy_test_file(test.to_str().unwrap()).unwrap(),
+                    &Options::default(),
+                )
+                .map(|_| println!("Processed '{:?}'", test))
+                .map_err(|e| format!("Failure to parse AST of '{:?}': {:?}", test, e))
+            })
+            .expect("");
+    }
+}

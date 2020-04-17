@@ -1,0 +1,6 @@
+target
+.vim
+.*sw*
+Session.vim
+tags
+tests
