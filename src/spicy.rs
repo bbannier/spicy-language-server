@@ -414,9 +414,9 @@ pub mod test {
             .filter_map(result::Result::ok)
             .filter(|e| {
                 !e.file_type().is_dir()
-                    && e.path().extension().map_or(None, |ext| ext.to_str()) == Some("spicy")
+                    && e.path().extension().and_then(|ext| ext.to_str()) == Some("spicy")
             })
-            .filter_map(|e| Some(e.path().to_path_buf()))
+            .map(|e| e.path().to_path_buf())
             .filter_map(|e| {
                 if let Some(path) = e.to_str() {
                     // Filter out BTest temp files.
@@ -450,7 +450,7 @@ pub mod test {
                 let cannot_parse_standalone = io::BufReader::new(&file).lines().any(|l| {
                     if let Ok(l) = l {
                         // Filter out inputs containing raw BTest instructions.
-                        l.starts_with("@") ||
+                        l.starts_with('@') ||
                             // Filter out inputs containing multiple files (which might depend on
                             // one another).
                             l.contains("TEST-START-FILE") || l.contains("TEST-START-NEXT")
