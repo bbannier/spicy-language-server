@@ -6,7 +6,8 @@ use {
     structopt::StructOpt,
 };
 
-fn main() -> Result<()> {
+#[tokio::main]
+async fn main() -> Result<()> {
     let opt = Options::from_args();
 
     // Set up logging. Because `stdio_transport` gets a lock on stdout and stdin, we must have
@@ -23,7 +24,7 @@ fn main() -> Result<()> {
     let (connection, io_threads) = Connection::stdio();
 
     // Run the server and wait for the two threads to end (typically by trigger LSP Exit event).
-    lsp::run_server(connection, opt)?;
+    lsp::run_server(connection, opt).await?;
     io_threads.join()?;
 
     Ok(())

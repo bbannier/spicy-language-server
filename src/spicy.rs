@@ -272,8 +272,7 @@ impl TryFrom<Output> for Spicyc {
 }
 
 // TODO(bbannier): return Spicy errors here.
-fn spicyc(path: &PathBuf, options: &Options) -> Result<Spicyc> {
-    // let output = Command::new(("spicyc"))
+async fn spicyc(path: &PathBuf, options: &Options) -> Result<Spicyc> {
     let output = Command::new(options.spicyc.as_deref().unwrap_or("spicyc"))
         .arg(&path)
         .args(&["-p", "-D", "ast-resolved"])
@@ -359,8 +358,11 @@ fn parse_resolved_asts(input: &str) -> Result<types::ASTs> {
     Ok(asts)
 }
 
-pub fn parse(path: &PathBuf, options: &Options) -> Result<(types::ASTs, Vec<SpicycDiagnostics>)> {
-    let result = spicyc(&path, options)?;
+pub async fn parse(
+    path: &PathBuf,
+    options: &Options,
+) -> Result<(types::ASTs, Vec<SpicycDiagnostics>)> {
+    let result = spicyc(&path, options).await?;
     Ok((
         parse_resolved_asts(&result.ast_resolved)?,
         result.diagnostics,
@@ -371,6 +373,7 @@ pub fn parse(path: &PathBuf, options: &Options) -> Result<(types::ASTs, Vec<Spic
 pub mod test {
     use {
         super::*,
+        futures::future::join_all,
         std::{
             fs::File,
             io::{self, BufRead},
@@ -464,13 +467,14 @@ pub mod test {
             .collect::<Vec<_>>()
     }
 
-    #[test]
-    fn test_spicyc() -> Result<()> {
+    #[tokio::test]
+    async fn test_spicyc() -> Result<()> {
         let file = "foo-fail.spicy";
         let result = spicyc(
             &data_file(file).ok_or_else(|| anyhow!("could not find data file '{}'", file))?,
             &Options::default(),
-        )?;
+        )
+        .await?;
 
         assert!(
             result
@@ -496,12 +500,13 @@ pub mod test {
         Ok(())
     }
 
-    #[test]
-    fn test_parse_all() -> Result<()> {
+    #[tokio::test]
+    async fn test_parse_all() -> Result<()> {
         let ast_resolved = spicyc(
             &data_file("foo.spicy").ok_or_else(|| anyhow!("unknown data file 'foo.spicy'"))?,
             &Options::default(),
-        )?
+        )
+        .await?
         .ast_resolved;
 
         let result = parse_rule(&ast_resolved, Rule::resolved_ast);
@@ -635,21 +640,28 @@ pub mod test {
         );
     }
 
-    #[test]
+    #[tokio::test]
     #[ignore]
-    fn spicy_tests() {
-        use rayon::prelude::*;
+    async fn spicy_tests() -> Result<()> {
+        let mut tasks = vec![];
+        for file in spicy_test_files() {
+            let path = spicy_test_file(file.to_str().unwrap()).unwrap();
+            let result = async move {
+                parse(&path, &Options::default())
+                    .await
+                    .and_then(|_| {
+                        println!("Processed '{:?}'", &path);
+                        Ok(())
+                    })
+                    .or_else(|e| Err(anyhow!("Error parsing '{:?}': {}", &path, &e)))
+            };
+            tasks.push(result);
+        }
 
-        spicy_test_files()
-            .par_iter()
-            .try_for_each(|test| {
-                parse(
-                    &spicy_test_file(test.to_str().unwrap()).unwrap(),
-                    &Options::default(),
-                )
-                .map(|_| println!("Processed '{:?}'", test))
-                .map_err(|e| format!("Failure to parse AST of '{:?}': {:?}", test, e))
-            })
-            .expect("");
+        join_all(tasks)
+            .await
+            .into_iter()
+            .collect::<Result<Vec<()>>>()
+            .and_then(|_| Ok(()))
     }
 }

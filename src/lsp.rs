@@ -18,7 +18,7 @@ mod server {
         },
     };
 
-    fn main_loop(server: Server) -> Result<()> {
+    async fn main_loop(server: Server) -> Result<()> {
         info!("starting main loop");
 
         let mut server = server;
@@ -53,8 +53,9 @@ mod server {
                 },
                 Event::Task(task) => match task {
                     Task::UpdateDocument(uri, text, version) => {
-                        server.update_document(uri, text, version)?
+                        server.update_document(uri, text, version).await?
                     }
+
                     Task::PublishDiagnostics() => server.publish_diagnostics()?,
                 },
             }
@@ -65,7 +66,7 @@ mod server {
         Ok(())
     }
 
-    pub fn run_server(connection: Connection, options: Options) -> Result<()> {
+    pub async fn run_server(connection: Connection, options: Options) -> Result<()> {
         let server_capabilities = server_capabilities();
         let initialize_params =
             connection.initialize(serde_json::to_value(server_capabilities)?)?;
@@ -87,7 +88,7 @@ mod server {
             open_document: None,
         };
 
-        main_loop(server)
+        main_loop(server).await
     }
 
     fn server_capabilities() -> ServerCapabilities {
@@ -157,7 +158,7 @@ mod server {
             Ok(())
         }
 
-        fn update_document(
+        async fn update_document(
             &mut self,
             uri: Url,
             text: Option<Vec<String>>,
@@ -189,7 +190,7 @@ mod server {
                     .collect::<Result<_>>()?,
             };
 
-            let (asts, diagnostics) = match spicy::parse(&path, &self.options) {
+            let (asts, diagnostics) = match spicy::parse(&path, &self.options).await {
                 Ok(asts) => asts,
                 Err(_) => {
                     // TODO(bbannier): send parsing errors as diagnostics.
@@ -430,10 +431,11 @@ mod server {
         use {
             super::*,
             std::{cell::Cell, thread::sleep, time},
+            tokio::task,
         };
 
         struct TestServer {
-            _thread: jod_thread::JoinHandle<()>,
+            _handle: task::JoinHandle<Result<()>>,
             client: Connection,
             req_id: Cell<u64>,
             notifications: (Sender<Notification>, Receiver<Notification>),
@@ -441,23 +443,19 @@ mod server {
 
         impl TestServer {
             #[allow(deprecated)]
-            fn new() -> Result<TestServer> {
+            fn start() -> Result<TestServer> {
                 // Set up logging. This might fail if another test thread already set up logging.
                 let _ = flexi_logger::Logger::with_env().start();
 
                 let (connection, client) = Connection::memory();
-                let _thread = jod_thread::Builder::new()
-                    .name("test server".to_string())
-                    .spawn(|| {
-                        run_server(connection, Options::default()).unwrap();
-                    })?;
+                let _handle = task::spawn(run_server(connection, Options::default()));
 
                 let req_id = Cell::new(0);
 
                 let notifications = crossbeam_channel::unbounded();
 
                 let server = TestServer {
-                    _thread,
+                    _handle,
                     client,
                     req_id,
                     notifications,
@@ -573,9 +571,9 @@ mod server {
             }
         }
 
-        #[test]
-        fn hover() -> Result<()> {
-            let server = TestServer::new()?;
+        #[tokio::test(threaded_scheduler)]
+        async fn hover() -> Result<()> {
+            let server = TestServer::start()?;
 
             let path = spicy::test::spicy_test_file("spicy/doc/hello.spicy")
                 .ok_or_else(|| anyhow!("test file not found"))?;
@@ -633,9 +631,9 @@ mod server {
             Ok(())
         }
 
-        #[test]
-        fn diagnostics() -> Result<()> {
-            let server = TestServer::new()?;
+        #[tokio::test(threaded_scheduler)]
+        async fn diagnostics() -> Result<()> {
+            let server = TestServer::start()?;
 
             let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("data/foo-fail.spicy");
             let uri = Url::from_file_path(&path)
