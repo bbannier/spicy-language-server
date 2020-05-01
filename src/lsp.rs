@@ -296,11 +296,11 @@ mod server {
             )
         }
 
-        fn handle_hover(&self, id: RequestId, params: TextDocumentPositionParams) -> Response {
+        fn handle_hover(&self, id: RequestId, params: HoverParams) -> Response {
             let result = self
                 .documents
-                .get(&params.text_document.uri)
-                .and_then(|d| d.hover(&params));
+                .get(&params.text_document_position_params.text_document.uri)
+                .and_then(|d| d.hover(&params.text_document_position_params));
 
             Response::new_ok(id, result)
         }
@@ -596,28 +596,43 @@ mod server {
 
             // Hover on comment line.
             assert_eq!(
-                server.send_request::<request::HoverRequest>(TextDocumentPositionParams::new(
-                    TextDocumentIdentifier { uri: uri.clone() },
-                    Position::new(1, 2),
-                ))?,
+                server.send_request::<request::HoverRequest>(HoverParams {
+                    text_document_position_params: TextDocumentPositionParams::new(
+                        TextDocumentIdentifier { uri: uri.clone() },
+                        Position::new(1, 2),
+                    ),
+                    work_done_progress_params: WorkDoneProgressParams {
+                        work_done_token: None
+                    }
+                })?,
                 None
             );
 
             // Hover on module decl.
             assert_eq!(
-                server.send_request::<request::HoverRequest>(TextDocumentPositionParams::new(
-                    TextDocumentIdentifier { uri: uri.clone() },
-                    Position::new(3, 10),
-                ))?,
+                server.send_request::<request::HoverRequest>(HoverParams {
+                    text_document_position_params: TextDocumentPositionParams::new(
+                        TextDocumentIdentifier { uri: uri.clone() },
+                        Position::new(3, 10),
+                    ),
+                    work_done_progress_params: WorkDoneProgressParams {
+                        work_done_token: None
+                    }
+                })?,
                 None
             );
 
             // Hover on print.
             assert_eq!(
-                server.send_request::<request::HoverRequest>(TextDocumentPositionParams::new(
-                    TextDocumentIdentifier { uri: uri.clone() },
-                    Position::new(5, 2),
-                ))?,
+                server.send_request::<request::HoverRequest>(HoverParams {
+                    text_document_position_params: TextDocumentPositionParams::new(
+                        TextDocumentIdentifier { uri: uri.clone() },
+                        Position::new(5, 2),
+                    ),
+                    work_done_progress_params: WorkDoneProgressParams {
+                        work_done_token: None
+                    }
+                })?,
                 Some(Hover {
                     contents: HoverContents::Markup(MarkupContent {
                         kind: MarkupKind::Markdown,
