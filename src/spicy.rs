@@ -480,7 +480,7 @@ pub mod test {
             result
                 .ast_resolved
                 .lines()
-                .any(|l| l.contains("| Foo -> Module %1")),
+                .any(|l| l.contains("| Foo -> declaration::Module")),
             "unexpected ast: {:?}",
             &result.ast_resolved[0..3]
         );
