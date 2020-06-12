@@ -205,9 +205,10 @@ mod server {
                         return None;
                     }
 
-                    let position = Position::new(d.position.line - 1, d.position.character - 1);
+                    let start = Position::new(d.start.line - 1, d.start.character - 1);
+                    let end = Position::new(d.end.line - 1, d.end.character - 1);
                     Some(Diagnostic::new_simple(
-                        Range::new(position, position),
+                        Range::new(start, end),
                         d.message.clone(),
                     ))
                 })
@@ -650,27 +651,54 @@ mod server {
         async fn diagnostics() -> Result<()> {
             let server = TestServer::start()?;
 
-            let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("data/foo-fail.spicy");
-            let uri = Url::from_file_path(&path)
-                .map_err(|_| anyhow!("could not convert '{:?}' to URI", &path))?;
+            {
+                let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("data/foo-fail.spicy");
+                let uri = Url::from_file_path(&path)
+                    .map_err(|_| anyhow!("could not convert '{:?}' to URI", &path))?;
 
-            server.send_notification::<notification::DidSaveTextDocument>(
-                DidSaveTextDocumentParams {
-                    text_document: TextDocumentIdentifier::new(uri.clone()),
-                },
-            )?;
+                server.send_notification::<notification::DidSaveTextDocument>(
+                    DidSaveTextDocumentParams {
+                        text_document: TextDocumentIdentifier::new(uri.clone()),
+                    },
+                )?;
 
-            assert_eq!(
-                server.notification::<notification::PublishDiagnostics>()?,
-                PublishDiagnosticsParams::new(
-                    uri,
-                    vec![Diagnostic::new_simple(
-                        Range::new(Position::new(2, 6), Position::new(2, 6)),
-                        "unknown ID \'a\'".into(),
-                    )],
-                    None,
-                ),
-            );
+                assert_eq!(
+                    server.notification::<notification::PublishDiagnostics>()?,
+                    PublishDiagnosticsParams::new(
+                        uri,
+                        vec![Diagnostic::new_simple(
+                            Range::new(Position::new(2, 6), Position::new(2, 6)),
+                            "unknown ID \'a\'".into(),
+                        )],
+                        None,
+                    ),
+                );
+            }
+
+            {
+                let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+                    .join("data/multiline-error-location-fail.spicy");
+                let uri = Url::from_file_path(&path)
+                    .map_err(|_| anyhow!("could not convert '{:?}' to URI", &path))?;
+
+                server.send_notification::<notification::DidSaveTextDocument>(
+                    DidSaveTextDocumentParams {
+                        text_document: TextDocumentIdentifier::new(uri.clone()),
+                    },
+                )?;
+
+                assert_eq!(
+                    server.notification::<notification::PublishDiagnostics>()?,
+                    PublishDiagnosticsParams::new(
+                        uri,
+                        vec![Diagnostic::new_simple(
+                            Range::new(Position::new(2, 18), Position::new(3, 11)),
+                            "not a parseable type (Test::Enum)".into(),
+                        )],
+                        None,
+                    ),
+                );
+            }
 
             Ok(())
         }

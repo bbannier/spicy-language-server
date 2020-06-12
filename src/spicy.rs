@@ -226,7 +226,8 @@ struct Spicyc {
 #[derive(Debug, PartialEq)]
 pub struct SpicycDiagnostics {
     pub file: String,
-    pub position: types::Position,
+    pub start: types::Position,
+    pub end: types::Position,
     pub message: String,
 }
 
@@ -246,19 +247,48 @@ impl TryFrom<Output> for Spicyc {
             .collect::<Vec<_>>()
             .join("\n");
 
-        let re_error = Regex::new(r"\[error\]\s((?:\w|/|-|\.)+).*:(\d+):(\d+):\s(.*)$")?;
+        let re_error = Regex::new(
+            r"(?x)
+            \[error\]
+            \s(?P<file>(?:\w|/|-|\.)+).*
+            :(?P<start_line>\d+)
+            :(?P<start_char>\d+)
+            (?:(-(?P<end_line>\d+):(?P<end_char>\d+))?)
+            :\s(?P<msg>.*)$",
+        )?;
 
         let diagnostics = other
             .iter()
             .filter_map(|&l| {
                 let captures = re_error.captures(&l)?;
-                let file = captures.get(1)?.as_str().into();
-                let line = captures.get(2)?.as_str().parse::<u64>().ok()?;
-                let character = captures.get(3)?.as_str().parse::<u64>().ok()?;
-                let message = captures.get(4)?.as_str().into();
+                let file = captures.name("file")?.as_str().into();
+
+                let start_line = captures.name("start_line")?.as_str().parse::<u64>().ok()?;
+                let start_character = captures.name("start_char")?.as_str().parse::<u64>().ok()?;
+
+                let end_line = if let Some(l) = captures.name("end_line") {
+                    l.as_str().parse::<u64>().ok()?
+                } else {
+                    start_line
+                };
+
+                let end_character = if let Some(c) = captures.name("end_char") {
+                    c.as_str().parse::<u64>().ok()?
+                } else {
+                    start_character
+                };
+
+                let message = captures.name("msg")?.as_str().into();
                 Some(SpicycDiagnostics {
                     file,
-                    position: types::Position { line, character },
+                    start: types::Position {
+                        line: start_line,
+                        character: start_character,
+                    },
+                    end: types::Position {
+                        line: end_line,
+                        character: end_character,
+                    },
                     message,
                 })
             })
@@ -489,7 +519,11 @@ pub mod test {
             result.diagnostics,
             vec![SpicycDiagnostics {
                 file: "data/foo-fail.spicy".into(),
-                position: types::Position {
+                start: types::Position {
+                    line: 3,
+                    character: 7
+                },
+                end: types::Position {
                     line: 3,
                     character: 7
                 },
