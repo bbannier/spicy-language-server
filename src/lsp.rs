@@ -91,6 +91,7 @@ mod server {
             // TODO(bbannier): enable more capabilities.
             text_document_sync: Some(TextDocumentSyncCapability::Options(
                 TextDocumentSyncOptions {
+                    change: Some(TextDocumentSyncKind::Full), // TODO(bbannier): check if we can support incremental mode.
                     open_close: Some(true),
                     save: Some(SaveOptions {
                         include_text: Some(false),
@@ -284,6 +285,21 @@ mod server {
             self.add_task(Task::UpdateDocument(uri, None, None))
         }
 
+        fn handle_did_change_text_document(
+            &mut self,
+            params: DidChangeTextDocumentParams,
+        ) -> Result<()> {
+            for change in params.content_changes {
+                return self.add_task(Task::UpdateDocument(
+                    params.text_document.uri.clone(),
+                    Some(change.text.lines().map(|l| l.into()).collect()),
+                    params.text_document.version,
+                ));
+            }
+
+            std::unimplemented!("cannot handle incremental changes");
+        }
+
         fn handle_status(&self, id: lsp_server::RequestId) -> Response {
             // This function does not accept parameters since `StatusRequest` is empty.
             assert_eq_size!(StatusRequest, ());
@@ -386,6 +402,12 @@ mod server {
         let _not = match notification_cast::<notification::DidSaveTextDocument>(_not) {
             Ok(params) => {
                 return server.handle_did_save_test_document(params);
+            }
+            Err(not) => not,
+        };
+        let _not = match notification_cast::<notification::DidChangeTextDocument>(_not) {
+            Ok(params) => {
+                return server.handle_did_change_text_document(params);
             }
             Err(not) => not,
         };
@@ -570,6 +592,55 @@ mod server {
                 self.send_request::<request::Shutdown>(()).unwrap();
                 self.send_notification::<notification::Exit>(()).unwrap();
             }
+        }
+
+        #[tokio::test(threaded_scheduler)]
+        async fn change() -> Result<()> {
+            let server = TestServer::start()?;
+
+            let uri =
+                Url::from_file_path("/foo.spicy").map_err(|_| anyhow!("could not create uri"))?;
+
+            server.send_notification::<notification::DidOpenTextDocument>(
+                DidOpenTextDocumentParams {
+                    text_document: TextDocumentItem::new(
+                        uri.clone(),
+                        "spicy".into(),
+                        1,
+                        "module Foo;".into(),
+                    ),
+                },
+            )?;
+
+            assert_eq!(
+                server.notification::<notification::PublishDiagnostics>()?,
+                PublishDiagnosticsParams::new(uri.clone(), vec![], Some(1))
+            );
+
+            server.send_notification::<notification::DidChangeTextDocument>(
+                DidChangeTextDocumentParams {
+                    text_document: VersionedTextDocumentIdentifier::new(uri.clone(), 2),
+                    content_changes: vec![TextDocumentContentChangeEvent {
+                        range: None,
+                        range_length: None,
+                        text: "module Foo; print a;".into(),
+                    }],
+                },
+            )?;
+
+            assert_eq!(
+                server.notification::<notification::PublishDiagnostics>()?,
+                PublishDiagnosticsParams::new(
+                    uri.clone(),
+                    vec![Diagnostic::new_simple(
+                        Range::new(Position::new(0, 18), Position::new(0, 18)),
+                        "unknown ID \'a\'".into()
+                    )],
+                    Some(2)
+                )
+            );
+
+            Ok(())
         }
 
         #[tokio::test(threaded_scheduler)]
