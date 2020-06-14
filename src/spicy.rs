@@ -7,9 +7,7 @@ use {
         collections::HashMap,
         convert::TryFrom,
         error, fmt,
-        path::PathBuf,
         process::{Command, Output},
-        result,
         str::from_utf8,
     },
 };
@@ -231,11 +229,9 @@ pub struct SpicycDiagnostics {
     pub message: String,
 }
 
-impl TryFrom<Output> for Spicyc {
-    type Error = anyhow::Error;
-
-    fn try_from(value: Output) -> result::Result<Self, Self::Error> {
-        let stderr = from_utf8(&value.stderr)?;
+impl Spicyc {
+    fn try_from(tmp_file: &str, real_file: &str, value: Output) -> Result<Self> {
+        let stderr = from_utf8(&value.stderr)?.replace(&tmp_file, &real_file);
 
         let (ast_resolved, other): (Vec<_>, _) = stderr
             .lines()
@@ -261,7 +257,7 @@ impl TryFrom<Output> for Spicyc {
             .iter()
             .filter_map(|&l| {
                 let captures = re_error.captures(&l)?;
-                let file = captures.name("file")?.as_str().into();
+                let _file = captures.name("file")?.as_str();
 
                 let start_line = captures.name("start_line")?.as_str().parse::<u64>().ok()?;
                 let start_character = captures.name("start_char")?.as_str().parse::<u64>().ok()?;
@@ -280,7 +276,7 @@ impl TryFrom<Output> for Spicyc {
 
                 let message = captures.name("msg")?.as_str().into();
                 Some(SpicycDiagnostics {
-                    file,
+                    file: real_file.to_string(),
                     start: types::Position {
                         line: start_line,
                         character: start_character,
@@ -301,16 +297,33 @@ impl TryFrom<Output> for Spicyc {
     }
 }
 
+pub struct File {
+    file_path: String,
+    contents: String,
+}
+
 // TODO(bbannier): return Spicy errors here.
-async fn spicyc(path: &PathBuf, options: &Options) -> Result<Spicyc> {
+async fn spicyc(file: &File, options: &Options) -> Result<Spicyc> {
+    let path = tempfile::Builder::new().suffix(".spicy").tempfile()?;
+    std::fs::write(path.path(), file.contents.as_bytes())?;
+
     let output = Command::new(options.spicyc.as_deref().unwrap_or("spicyc"))
-        .arg(&path)
+        .arg(&path.path())
         .args(&["-p", "-D", "ast-resolved"])
         .output()
         .with_context(|| "Could not execute 'spicyc'".to_owned())
         .expect("");
 
-    Spicyc::try_from(output)
+    Spicyc::try_from(
+        &path
+            .path()
+            .file_name()
+            .ok_or_else(|| anyhow!("could not extract expected filename from path {:?}", &path))?
+            .to_string_lossy()
+            .to_string(),
+        &file.file_path,
+        output,
+    )
 }
 
 #[derive(Debug)]
@@ -389,10 +402,19 @@ fn parse_resolved_asts(input: &str) -> Result<types::ASTs> {
 }
 
 pub async fn parse(
-    path: &PathBuf,
+    file_path: String,
+    contents: &str,
     options: &Options,
 ) -> Result<(types::ASTs, Vec<SpicycDiagnostics>)> {
-    let result = spicyc(&path, options).await?;
+    let result = spicyc(
+        &File {
+            file_path,
+            contents: contents.to_string(),
+        },
+        options,
+    )
+    .await?;
+
     Ok((
         parse_resolved_asts(&result.ast_resolved)?,
         result.diagnostics,
@@ -405,22 +427,14 @@ pub mod test {
         super::*,
         futures::future::join_all,
         std::{
-            fs::File,
+            fs::{read_to_string, File},
             io::{self, BufRead},
-            path::Path,
+            path::{Path, PathBuf},
+            result,
         },
+        textwrap::dedent,
         walkdir::WalkDir,
     };
-
-    fn data_file(file: &str) -> Option<PathBuf> {
-        Some(
-            Path::new(file!())
-                .parent()?
-                .parent()?
-                .join("data")
-                .join(file),
-        )
-    }
 
     pub fn spicy_test_file(file: &str) -> Option<PathBuf> {
         for test in spicy_test_files() {
@@ -500,8 +514,20 @@ pub mod test {
     #[tokio::test]
     async fn test_spicyc() -> Result<()> {
         let file = "foo-fail.spicy";
+        let contents = dedent(
+            r#"
+            module Foo;
+
+            print a;
+        "#,
+        )
+        .into();
+
         let result = spicyc(
-            &data_file(file).ok_or_else(|| anyhow!("could not find data file '{}'", file))?,
+            &super::File {
+                file_path: file.into(),
+                contents,
+            },
             &Options::default(),
         )
         .await?;
@@ -518,13 +544,13 @@ pub mod test {
         assert_eq!(
             result.diagnostics,
             vec![SpicycDiagnostics {
-                file: "data/foo-fail.spicy".into(),
+                file: "foo-fail.spicy".into(),
                 start: types::Position {
-                    line: 3,
+                    line: 4,
                     character: 7
                 },
                 end: types::Position {
-                    line: 3,
+                    line: 4,
                     character: 7
                 },
                 message: "unknown ID \'a\'".into()
@@ -537,7 +563,10 @@ pub mod test {
     #[tokio::test]
     async fn test_parse_all() -> Result<()> {
         let ast_resolved = spicyc(
-            &data_file("foo.spicy").ok_or_else(|| anyhow!("unknown data file 'foo.spicy'"))?,
+            &super::File {
+                file_path: "foo.spicy".into(),
+                contents: "module Foo;".into(),
+            },
             &Options::default(),
         )
         .await?
@@ -681,13 +710,20 @@ pub mod test {
         for file in spicy_test_files() {
             let path = spicy_test_file(file.to_str().unwrap()).unwrap();
             let result = async move {
-                parse(&path, &Options::default())
-                    .await
-                    .and_then(|_| {
-                        println!("Processed '{:?}'", &path);
-                        Ok(())
-                    })
-                    .or_else(|e| Err(anyhow!("Error parsing '{:?}': {}", &path, &e)))
+                parse(
+                    path.file_name()
+                        .ok_or(anyhow!("could not extract filename from path {:?}", &path))?
+                        .to_string_lossy()
+                        .to_string(),
+                    &read_to_string(&path)?,
+                    &Options::default(),
+                )
+                .await
+                .and_then(|_| {
+                    println!("Processed {:?}", &path);
+                    Ok(())
+                })
+                .or_else(|e| Err(anyhow!("Error parsing '{:?}': {}", &path, &e)))
             };
             tasks.push(result);
         }

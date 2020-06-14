@@ -1,13 +1,15 @@
 use {
     anyhow::Result,
     spicy_language_server::{options::Options, spicy},
-    std::{env, path::Path},
+    std::env,
 };
 
 #[tokio::main]
 async fn main() -> Result<()> {
     for input in env::args().skip(1) {
-        spicy::parse(&Path::new(&input).to_path_buf(), &Options::default()).await?;
+        let contents = std::fs::read_to_string(&input)?;
+
+        spicy::parse(input, &contents, &Options::default()).await?;
     }
 
     Ok(())

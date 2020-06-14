@@ -180,7 +180,16 @@ mod server {
                 None => read_to_string(&path)?.lines().map(|l| l.into()).collect(),
             };
 
-            let (asts, diagnostics) = match spicy::parse(&path, &self.options).await {
+            let (asts, diagnostics) = match spicy::parse(
+                path.file_name()
+                    .ok_or_else(|| anyhow!("could not extract filename from path '{:?}", &path))?
+                    .to_string_lossy()
+                    .to_string(),
+                &text.join("\n"),
+                &self.options,
+            )
+            .await
+            {
                 Ok(asts) => asts,
                 Err(_) => {
                     // TODO(bbannier): send parsing errors as diagnostics.
@@ -421,7 +430,8 @@ mod server {
     mod tests {
         use {
             super::*,
-            std::{cell::Cell, fs::File, thread::sleep, time},
+            std::{cell::Cell, thread::sleep, time},
+            textwrap::dedent,
             tokio::task,
         };
 
@@ -637,13 +647,19 @@ mod server {
             let server = TestServer::start()?;
 
             {
-                let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("data/foo-fail.spicy");
-                let uri = Url::from_file_path(&path)
-                    .map_err(|_| anyhow!("could not convert '{:?}' to URI", &path))?;
+                let uri = Url::from_file_path("/foo.spicy")
+                    .map_err(|_| anyhow!("could not create uri"))?;
 
-                server.send_notification::<notification::DidSaveTextDocument>(
-                    DidSaveTextDocumentParams {
-                        text_document: TextDocumentIdentifier::new(uri.clone()),
+                let text = dedent(
+                    r#"
+                    module Foo;
+                    print a;
+                    "#,
+                );
+
+                server.send_notification::<notification::DidOpenTextDocument>(
+                    DidOpenTextDocumentParams {
+                        text_document: TextDocumentItem::new(uri.clone(), "spicy".into(), 1, text),
                     },
                 )?;
 
@@ -655,20 +671,32 @@ mod server {
                             Range::new(Position::new(2, 6), Position::new(2, 6)),
                             "unknown ID \'a\'".into(),
                         )],
-                        None,
+                        Some(1),
                     ),
                 );
             }
 
             {
-                let path = Path::new(env!("CARGO_MANIFEST_DIR"))
-                    .join("data/multiline-error-location-fail.spicy");
-                let uri = Url::from_file_path(&path)
-                    .map_err(|_| anyhow!("could not convert '{:?}' to URI", &path))?;
+                let uri = Url::from_file_path(Path::new("/foo.spicy"))
+                    .map_err(|_| anyhow!("could not create uri"))?;
 
-                server.send_notification::<notification::DidSaveTextDocument>(
-                    DidSaveTextDocumentParams {
-                        text_document: TextDocumentIdentifier::new(uri.clone()),
+                let text = dedent(
+                    r#"
+                    module Test;
+
+                    type Type = unit {
+                        : Enum;  # Type expected here.
+                    };
+
+                    type Enum = enum {
+                        FOO
+                    };
+                    "#,
+                );
+
+                server.send_notification::<notification::DidOpenTextDocument>(
+                    DidOpenTextDocumentParams {
+                        text_document: TextDocumentItem::new(uri.clone(), "spicy".into(), 1, text),
                     },
                 )?;
 
@@ -677,10 +705,10 @@ mod server {
                     PublishDiagnosticsParams::new(
                         uri,
                         vec![Diagnostic::new_simple(
-                            Range::new(Position::new(2, 18), Position::new(3, 11)),
+                            Range::new(Position::new(3, 18), Position::new(4, 11)),
                             "not a parseable type (Test::Enum)".into(),
                         )],
-                        None,
+                        Some(1),
                     ),
                 );
             }

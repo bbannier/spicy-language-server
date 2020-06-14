@@ -1,9 +1,0 @@
-module Test;
-
-type Type = unit {
-    : Enum;  # Type expected here.
-};
-
-type Enum = enum {
-    FOO
-};
