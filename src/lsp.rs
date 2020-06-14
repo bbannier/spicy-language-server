@@ -3,19 +3,14 @@ pub use server::run_server;
 mod server {
     use {
         crate::{lsp::ast, options::Options, spicy},
-        anyhow::{anyhow, Context, Result},
+        anyhow::{anyhow, Result},
         crossbeam_channel::{select, Receiver, RecvError, Sender},
         log::{debug, info},
         lsp_server::{Connection, Message, Notification, Request, RequestId, Response},
         lsp_types::*,
         serde::{Deserialize, Serialize},
         static_assertions::assert_eq_size,
-        std::{
-            collections::HashMap,
-            fs::File,
-            io::{self, BufRead},
-            path::Path,
-        },
+        std::{collections::HashMap, fs::read_to_string, path::Path},
     };
 
     async fn main_loop(server: Server) -> Result<()> {
@@ -180,14 +175,9 @@ mod server {
 
             let path = Path::new(uri.path()).to_path_buf();
 
-            let file =
-                File::open(&path).with_context(|| format!("Could not open file '{}'", &uri))?;
             let text = match text {
                 Some(text) => text,
-                None => io::BufReader::new(&file)
-                    .lines()
-                    .map(|l| l.map_err(|e| e.into()))
-                    .collect::<Result<_>>()?,
+                None => read_to_string(&path)?.lines().map(|l| l.into()).collect(),
             };
 
             let (asts, diagnostics) = match spicy::parse(&path, &self.options).await {
@@ -431,7 +421,7 @@ mod server {
     mod tests {
         use {
             super::*,
-            std::{cell::Cell, thread::sleep, time},
+            std::{cell::Cell, fs::File, thread::sleep, time},
             tokio::task,
         };
 
@@ -581,12 +571,7 @@ mod server {
             let uri = Url::from_file_path(&path)
                 .map_err(|_| anyhow!("could not convert '{:?}' to URI", &path))?;
 
-            let text = io::BufReader::new(&File::open(Path::new(&path))?)
-                .lines()
-                .into_iter()
-                .map(|l| l.map_err(|e| e.into()))
-                .collect::<Result<Vec<_>>>()?
-                .join("\n");
+            let text = read_to_string(&path)?;
 
             // Prime the server with a minimal module.
             server.send_notification::<notification::DidOpenTextDocument>(
