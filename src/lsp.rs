@@ -68,7 +68,7 @@ mod server {
         let initialize_params: InitializeParams = serde_json::from_value(initialize_params)?;
 
         let cwd = Url::from_file_path(std::env::current_dir()?).ok();
-        let root_uri = initialize_params
+        let _root_uri = initialize_params
             .root_uri
             .unwrap_or_else(|| cwd.expect("could not determine root_uri"));
 
@@ -79,7 +79,7 @@ mod server {
             connection,
             tasks,
             documents: Documents::new(),
-            root_uri,
+            _root_uri,
             open_document: None,
         };
 
@@ -119,7 +119,7 @@ mod server {
         connection: Connection,
         tasks: Tasks,
         documents: Documents,
-        root_uri: Url,
+        _root_uri: Url,
         open_document: Option<Url>,
     }
 
