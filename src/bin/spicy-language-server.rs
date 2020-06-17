@@ -12,10 +12,15 @@ async fn main() -> Result<()> {
 
     // Set up logging. Because `stdio_transport` gets a lock on stdout and stdin, we must have
     // our logging only write out to stderr.
-    flexi_logger::Logger::with_env_or_str(opt.verbosity.as_str())
-        .log_to_file()
-        .directory(opt.log_directory.as_str())
-        .start()?;
+    let mut logger = flexi_logger::Logger::with_env_or_str(opt.verbosity.as_str());
+
+    if let Some(log_dir) = &opt.log_directory {
+        // If the user specified a log directory, log to a file in that directory. Otherwise log to stderr.
+        logger = logger.directory(log_dir).log_to_file();
+    }
+
+    logger.start()?;
+
     info!("Starting Spicy LSP server");
     debug!("Options at startup: {:?}", &opt);
 
