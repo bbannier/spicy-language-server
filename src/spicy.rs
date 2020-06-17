@@ -4,7 +4,6 @@ use {
     pest_derive::Parser,
     regex::Regex,
     std::{
-        collections::HashMap,
         convert::TryFrom,
         error, fmt,
         process::{Command, Output},
@@ -33,7 +32,7 @@ pub struct SpicycDiagnostics {
 }
 
 impl Spicyc {
-    fn try_from(tmp_file: &str, real_file: &str, value: Output) -> Result<Self> {
+    fn try_from(tmp_file: &str, real_file: &str, value: &Output) -> Result<Self> {
         let stderr = from_utf8(&value.stderr)?.replace(&tmp_file, &real_file);
 
         let (ast_resolved, other): (Vec<_>, _) = stderr
@@ -125,7 +124,7 @@ async fn spicyc(file: &File, options: &Options) -> Result<Spicyc> {
             .to_string_lossy()
             .to_string(),
         &file.file_path,
-        output,
+        &output,
     )
 }
 
@@ -230,6 +229,7 @@ pub mod test {
         super::*,
         futures::future::join_all,
         std::{
+            collections::HashMap,
             fs::{read_to_string, File},
             io::{self, BufRead},
             path::{Path, PathBuf},

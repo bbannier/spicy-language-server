@@ -29,7 +29,7 @@ async fn main() -> Result<()> {
     let (connection, io_threads) = Connection::stdio();
 
     // Run the server and wait for the two threads to end (typically by trigger LSP Exit event).
-    lsp::run_server(connection, opt).await?;
+    lsp::run(connection, opt).await?;
     io_threads.join()?;
 
     Ok(())

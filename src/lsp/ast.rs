@@ -1,6 +1,7 @@
 use {
     crate::{lsp::server, spicy},
     lsp_types::{Position, Range, TextDocumentPositionParams},
+    std::convert::TryFrom,
 };
 
 #[derive(Debug)]
@@ -11,7 +12,7 @@ pub struct Node<'a> {
 
 impl<'a> server::Query for Node<'a> {
     fn hover(&self, params: &TextDocumentPositionParams) -> Option<lsp_types::Hover> {
-        use lsp_types::*;
+        use lsp_types::{Hover, HoverContents, MarkupContent, MarkupKind};
 
         let (_token, range) = self.get_token_at_pos(&params.position)?;
 
@@ -49,13 +50,17 @@ impl<'a> Node<'a> {
     fn get_token_at_pos(&self, position: &Position) -> Option<(&str, Range)> {
         let (token, range) = self
             .text
-            .get(position.line as usize)?
+            .get(usize::try_from(position.line).ok()?)?
             .split_terminator(|c: char| c.is_whitespace() || c == '.' || c == '=' || c == ';')
             .scan(0, |length, word| {
                 *length += word.len() + 1;
                 Some((*length, word))
             })
-            .skip_while(|(end, _)| (*end - 1) < (position.character as usize))
+            .skip_while(|(end, _)| {
+                (*end - 1)
+                    < (usize::try_from(position.character)
+                        .expect("character position not convertible to 'usize'"))
+            })
             .map(|(end, word)| (word, (end - word.len(), end - 1)))
             .next()?;
 
@@ -122,7 +127,10 @@ impl<'a> Node<'a> {
 
                     // Return a tuple of (distance, decl) for later distance minimization.
                     return Some((
-                        i64::abs(position.character as i64 - mid as i64).abs(),
+                        i64::abs(
+                            i64::try_from(position.character).ok()? - i64::try_from(mid).ok()?,
+                        )
+                        .abs(),
                         depth,
                         decl,
                     ));

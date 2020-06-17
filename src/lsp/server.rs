@@ -4,7 +4,12 @@ use {
     crossbeam_channel::{select, Receiver, RecvError, Sender},
     log::{debug, info},
     lsp_server::{Connection, Message, Notification, Request, RequestId, Response},
-    lsp_types::*,
+    lsp_types::{
+        notification, request, Diagnostic, DidChangeTextDocumentParams, DidOpenTextDocumentParams,
+        DidSaveTextDocumentParams, Hover, HoverParams, Position, PublishDiagnosticsParams, Range,
+        SaveOptions, ServerCapabilities, TextDocumentPositionParams, TextDocumentSyncCapability,
+        TextDocumentSyncKind, TextDocumentSyncOptions, Url,
+    },
     serde::{Deserialize, Serialize},
     static_assertions::assert_eq_size,
     std::{collections::HashMap, fs::read_to_string, path::Path},
@@ -58,15 +63,9 @@ async fn main_loop(server: Server) -> Result<()> {
     Ok(())
 }
 
-pub async fn run_server(connection: Connection, options: Options) -> Result<()> {
+pub async fn run(connection: Connection, options: Options) -> Result<()> {
     let server_capabilities = server_capabilities();
-    let initialize_params = connection.initialize(serde_json::to_value(server_capabilities)?)?;
-    let initialize_params: InitializeParams = serde_json::from_value(initialize_params)?;
-
-    let cwd = Url::from_file_path(std::env::current_dir()?).ok();
-    let _root_uri = initialize_params
-        .root_uri
-        .unwrap_or_else(|| cwd.expect("could not determine root_uri"));
+    connection.initialize(serde_json::to_value(server_capabilities)?)?;
 
     let tasks = Tasks::new();
 
@@ -75,7 +74,6 @@ pub async fn run_server(connection: Connection, options: Options) -> Result<()> 
         connection,
         tasks,
         documents: Documents::new(),
-        _root_uri,
         open_document: None,
     };
 
@@ -92,7 +90,7 @@ fn server_capabilities() -> ServerCapabilities {
                 save: Some(SaveOptions {
                     include_text: Some(false),
                 }),
-                ..Default::default()
+                ..TextDocumentSyncOptions::default()
             },
         )),
         // completion_provider: Some(CompletionOptions {
@@ -106,7 +104,7 @@ fn server_capabilities() -> ServerCapabilities {
         // document_symbol_provider: Some(true),
         // workspace_symbol_provider: Some(true),
         // rename_provider: Some(RenameProviderCapability::Simple(true)),
-        ..Default::default()
+        ..ServerCapabilities::default()
     }
 }
 
@@ -115,7 +113,6 @@ pub struct Server {
     connection: Connection,
     tasks: Tasks,
     documents: Documents,
-    _root_uri: Url,
     open_document: Option<Url>,
 }
 
@@ -177,7 +174,7 @@ impl Server {
             None => read_to_string(&path)?.lines().map(|l| l.into()).collect(),
         };
 
-        let (asts, diagnostics) = match spicy::parse(
+        let (asts, diagnostics) = if let Ok(asts) = spicy::parse(
             path.file_name()
                 .ok_or_else(|| anyhow!("could not extract filename from path '{:?}", &path))?
                 .to_string_lossy()
@@ -187,11 +184,10 @@ impl Server {
         )
         .await
         {
-            Ok(asts) => asts,
-            Err(_) => {
-                // TODO(bbannier): send parsing errors as diagnostics.
-                return Ok(());
-            }
+            asts
+        } else {
+            // TODO(bbannier): send parsing errors as diagnostics.
+            return Ok(());
         };
 
         let diagnostics = diagnostics
@@ -306,7 +302,7 @@ impl Server {
         )
     }
 
-    fn handle_hover(&self, id: RequestId, params: HoverParams) -> Response {
+    fn handle_hover(&self, id: RequestId, params: &HoverParams) -> Response {
         let result = self
             .documents
             .get(&params.text_document_position_params.text_document.uri)
@@ -370,43 +366,46 @@ fn on_request(req: Request, server: &mut Server) -> Result<()> {
 }
 
 fn handle_request(req: Request, server: &mut Server) -> Option<Response> {
-    let _req = match request_cast::<request::HoverRequest>(req) {
+    let req = match request_cast::<request::HoverRequest>(req) {
         Ok((id, params)) => {
-            return Some(server.handle_hover(id, params));
+            return Some(server.handle_hover(id, &params));
         }
         Err(req) => req,
     };
-    let _req = match request_cast::<StatusRequest>(_req) {
+    let req = match request_cast::<StatusRequest>(req) {
         Ok((id, _)) => {
             return Some(server.handle_status(id));
         }
         Err(req) => req,
     };
 
-    std::unimplemented!(); // TODO(bbannier): make this `None` once we have some ground covered.
+    debug!("Unhandled request: {:?}", &req);
+
+    None
 }
 
 fn on_notification(not: Notification, server: &mut Server) -> Result<()> {
-    let _not = match notification_cast::<notification::DidOpenTextDocument>(not) {
+    let not = match notification_cast::<notification::DidOpenTextDocument>(not) {
         Ok(params) => {
             return server.handle_did_open_text_document(params);
         }
         Err(not) => not,
     };
-    let _not = match notification_cast::<notification::DidSaveTextDocument>(_not) {
+    let not = match notification_cast::<notification::DidSaveTextDocument>(not) {
         Ok(params) => {
             return server.handle_did_save_test_document(params);
         }
         Err(not) => not,
     };
-    let _not = match notification_cast::<notification::DidChangeTextDocument>(_not) {
+    let not = match notification_cast::<notification::DidChangeTextDocument>(not) {
         Ok(params) => {
             return server.handle_did_change_text_document(params);
         }
         Err(not) => not,
     };
 
-    debug!("Unhandled notification: {:?}", _not);
+    debug!("notification not understood: {:?}", &not);
+
     Ok(())
 }
 
@@ -446,6 +445,11 @@ impl request::Request for StatusRequest {
 mod tests {
     use {
         super::*,
+        lsp_types::{
+            ClientCapabilities, HoverContents, InitializeParams, InitializedParams, MarkupContent,
+            MarkupKind, TextDocumentContentChangeEvent, TextDocumentIdentifier, TextDocumentItem,
+            VersionedTextDocumentIdentifier, WorkDoneProgressParams,
+        },
         std::{cell::Cell, thread::sleep, time},
         textwrap::dedent,
         tokio::task,
@@ -465,7 +469,7 @@ mod tests {
             let _ = flexi_logger::Logger::with_env().start();
 
             let (connection, client) = Connection::memory();
-            let _handle = task::spawn(run_server(connection, Options::default()));
+            let _handle = task::spawn(run(connection, Options::default()));
 
             let req_id = Cell::new(0);
 

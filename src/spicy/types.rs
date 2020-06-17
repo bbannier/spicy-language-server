@@ -1,4 +1,8 @@
-use super::*;
+use {
+    super::Rule,
+    anyhow::{anyhow, Result},
+    std::{collections::HashMap, convert::TryFrom},
+};
 
 #[derive(Debug, Default, PartialEq, Eq, Clone)]
 pub struct AST {
@@ -108,7 +112,7 @@ pub struct Location {
 impl Location {
     fn try_from(location: pest::iterators::Pairs<Rule>) -> Result<Self> {
         let mut result = Location {
-            ..Default::default()
+            ..Location::default()
         };
         for rule in location {
             match rule.as_rule() {
@@ -118,7 +122,7 @@ impl Location {
                 Rule::line_number_end => {
                     result.end = Some(Position {
                         line: rule.as_str().parse()?,
-                        ..Default::default()
+                        ..Position::default()
                     })
                 }
                 Rule::column_number_end => {
