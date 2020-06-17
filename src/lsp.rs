@@ -589,6 +589,12 @@ mod server {
 
         impl Drop for TestServer {
             fn drop(&mut self) {
+                assert!(
+                    self.notifications.1.is_empty(),
+                    "terminating server with unprocessed notification(s): {:?}",
+                    &self.notifications.1.try_iter().collect::<Vec<_>>(),
+                );
+
                 self.send_request::<request::Shutdown>(()).unwrap();
                 self.send_notification::<notification::Exit>(()).unwrap();
             }
@@ -640,6 +646,23 @@ mod server {
                 )
             );
 
+            // Fixing the document leads to the diagnostic to go away.
+            server.send_notification::<notification::DidOpenTextDocument>(
+                DidOpenTextDocumentParams {
+                    text_document: TextDocumentItem::new(
+                        uri.clone(),
+                        "spicy".into(),
+                        3,
+                        "module Foo;".into(),
+                    ),
+                },
+            )?;
+
+            assert_eq!(
+                server.notification::<notification::PublishDiagnostics>()?,
+                PublishDiagnosticsParams::new(uri.clone(), vec![], Some(3))
+            );
+
             Ok(())
         }
 
@@ -660,6 +683,11 @@ mod server {
                     text_document: TextDocumentItem::new(uri.clone(), "spicy".into(), 1, text),
                 },
             )?;
+
+            assert!(server
+                .notification::<notification::PublishDiagnostics>()?
+                .diagnostics
+                .is_empty());
 
             // Hover on comment line.
             assert_eq!(
