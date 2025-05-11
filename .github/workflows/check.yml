@@ -1,0 +1,58 @@
+name: Check
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+env:
+  CARGO_INCREMENTAL: 0
+  RUSTFLAGS: -D warnings
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        name:
+          - linux-x86-64-gnu
+          - mac-x86-64
+        include:
+          - name: linux-x86-64-gnu
+            os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+          - name: mac-x86-64
+            os: macos-latest
+            target: x86_64-apple-darwin
+
+    name: Binaries for ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.os }}-cargo-${{ hashFiles('Cargo.lock') }}
+      - name: Test
+        run: cargo test
+
+  pre-commit:
+    name: Run pre-commit hooks
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: pre-commit-cargo-${{ hashFiles('Cargo.lock') }}
+      - uses: actions/setup-python@v5
+      - uses: pre-commit/action@v3.0.1
