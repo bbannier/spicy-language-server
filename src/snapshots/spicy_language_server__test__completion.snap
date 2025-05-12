@@ -1,0 +1,7 @@
+---
+source: src/lib.rs
+expression: "server.completion(CompletionParams\n{\n    text_document_position:\n    TextDocumentPositionParams::new(TextDocumentIdentifier::new(uri.clone()),\n    Position::new(u32::MAX, 0),), work_done_progress_params:\n    WorkDoneProgressParams::default(), partial_result_params:\n    PartialResultParams::default(), context: None,\n}).await"
+---
+Ok(
+    None,
+)

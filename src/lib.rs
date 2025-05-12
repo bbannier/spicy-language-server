@@ -219,3 +219,143 @@ fn keywords() -> Vec<String> {
         .map(|t| t.type_)
         .collect()
 }
+
+#[cfg(test)]
+mod test {
+    use std::u32;
+
+    use insta::assert_debug_snapshot;
+    use tower_lsp::{
+        LanguageServer,
+        jsonrpc::Result,
+        lsp_types::{
+            CompletionParams, CompletionResponse, DidOpenTextDocumentParams, InitializeParams,
+            PartialResultParams, Position, TextDocumentIdentifier, TextDocumentItem,
+            TextDocumentPositionParams, Url, WorkDoneProgressParams,
+        },
+    };
+
+    use crate::Lsp;
+
+    #[derive(Default)]
+    struct Server(Lsp);
+
+    impl Server {
+        async fn initialize(self) -> Result<ServerInitialized> {
+            let _ = self.0.initialize(InitializeParams::default()).await;
+            Ok(ServerInitialized(self.0))
+        }
+    }
+
+    struct ServerInitialized(Lsp);
+
+    impl ServerInitialized {
+        async fn did_open(&self, params: DidOpenTextDocumentParams) {
+            self.0.did_open(params).await
+        }
+
+        async fn completion(&self, params: CompletionParams) -> Result<Option<CompletionResponse>> {
+            self.0.completion(params).await
+        }
+    }
+
+    #[tokio::test]
+    async fn completion() {
+        let server = Server::default().initialize().await.unwrap();
+
+        let uri = Url::from_file_path("/x.spicy").unwrap();
+
+        server
+            .did_open(DidOpenTextDocumentParams {
+                text_document: TextDocumentItem::new(
+                    uri.clone(),
+                    "spicy".into(),
+                    0,
+                    "
+COMPLETELY_UNKNOWN
+uni
+"
+                    .into(),
+                ),
+            })
+            .await;
+
+        // Completion out of bounds.
+        assert_debug_snapshot!(
+            server
+                .completion(CompletionParams {
+                    text_document_position: TextDocumentPositionParams::new(
+                        TextDocumentIdentifier::new(uri.clone()),
+                        Position::new(u32::MAX, 0),
+                    ),
+                    work_done_progress_params: WorkDoneProgressParams::default(),
+                    partial_result_params: PartialResultParams::default(),
+                    context: None,
+                })
+                .await
+        );
+
+        // Completion for unknown file.
+        assert_debug_snapshot!(
+            server
+                .completion(CompletionParams {
+                    text_document_position: TextDocumentPositionParams::new(
+                        TextDocumentIdentifier::new(
+                            Url::from_file_path("/does_not_exist.spicy").unwrap()
+                        ),
+                        Position::new(u32::MAX, 0),
+                    ),
+                    work_done_progress_params: WorkDoneProgressParams::default(),
+                    partial_result_params: PartialResultParams::default(),
+                    context: None,
+                })
+                .await
+        );
+
+        // Complete on empty line.
+        assert_debug_snapshot!(
+            server
+                .completion(CompletionParams {
+                    text_document_position: TextDocumentPositionParams::new(
+                        TextDocumentIdentifier::new(uri.clone()),
+                        Position::new(0, 0),
+                    ),
+                    work_done_progress_params: WorkDoneProgressParams::default(),
+                    partial_result_params: PartialResultParams::default(),
+                    context: None,
+                })
+                .await
+        );
+
+        // Complete on line with `COMPLETELY_UNKNOWN`.
+        assert_eq!(
+            server
+                .completion(CompletionParams {
+                    text_document_position: TextDocumentPositionParams::new(
+                        TextDocumentIdentifier::new(uri.clone()),
+                        Position::new(1, 0),
+                    ),
+                    work_done_progress_params: WorkDoneProgressParams::default(),
+                    partial_result_params: PartialResultParams::default(),
+                    context: None,
+                })
+                .await,
+            Ok(Some(CompletionResponse::from(vec![])))
+        );
+
+        // Complete on line with `uni`.
+        assert_debug_snapshot!(
+            server
+                .completion(CompletionParams {
+                    text_document_position: TextDocumentPositionParams::new(
+                        TextDocumentIdentifier::new(uri.clone()),
+                        Position::new(2, 0),
+                    ),
+                    work_done_progress_params: WorkDoneProgressParams::default(),
+                    partial_result_params: PartialResultParams::default(),
+                    context: None,
+                })
+                .await
+        );
+    }
+}
