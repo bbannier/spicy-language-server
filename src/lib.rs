@@ -225,9 +225,9 @@ mod test {
         jsonrpc::Result,
         lsp_types::{
             CompletionParams, CompletionResponse, DidOpenTextDocumentParams,
-            DocumentFormattingParams, FormattingOptions, InitializeParams, PartialResultParams,
-            Position, TextDocumentIdentifier, TextDocumentItem, TextDocumentPositionParams,
-            TextEdit, Url, WorkDoneProgressParams,
+            DocumentFormattingParams, DocumentRangeFormattingParams, FormattingOptions,
+            InitializeParams, PartialResultParams, Position, Range, TextDocumentIdentifier,
+            TextDocumentItem, TextDocumentPositionParams, TextEdit, Url, WorkDoneProgressParams,
         },
     };
 
@@ -259,6 +259,13 @@ mod test {
             params: DocumentFormattingParams,
         ) -> Result<Option<Vec<TextEdit>>> {
             self.0.formatting(params).await
+        }
+
+        async fn range_formatting(
+            &self,
+            params: DocumentRangeFormattingParams,
+        ) -> Result<Option<Vec<TextEdit>>> {
+            self.0.range_formatting(params).await
         }
     }
 
@@ -407,6 +414,54 @@ uni
                     text_document: TextDocumentIdentifier::new(
                         Url::from_file_path("/does_not_exist.spicy").unwrap()
                     ),
+                    options: FormattingOptions::default(),
+                    work_done_progress_params: WorkDoneProgressParams::default(),
+                })
+                .await,
+            Ok(None)
+        );
+    }
+
+    #[tokio::test]
+    async fn range_formatting() {
+        let server = Server::default().initialize().await.unwrap();
+
+        let uri = Url::from_file_path("/x.spicy").unwrap();
+
+        server
+            .did_open(DidOpenTextDocumentParams {
+                text_document: TextDocumentItem::new(
+                    uri.clone(),
+                    "spicy".into(),
+                    0,
+                    "
+module   foo    ;
+
+type X =unit (){  };
+"
+                    .into(),
+                ),
+            })
+            .await;
+
+        assert_debug_snapshot!(
+            server
+                .range_formatting(DocumentRangeFormattingParams {
+                    text_document: TextDocumentIdentifier::new(uri),
+                    range: Range::new(Position::new(1, 0), Position::new(2, 0)),
+                    options: FormattingOptions::default(),
+                    work_done_progress_params: WorkDoneProgressParams::default(),
+                })
+                .await
+        );
+
+        assert_eq!(
+            server
+                .range_formatting(DocumentRangeFormattingParams {
+                    text_document: TextDocumentIdentifier::new(
+                        Url::from_file_path("/does_not_exist.spicy").unwrap()
+                    ),
+                    range: Range::new(Position::new(1, 0), Position::new(2, 0)),
                     options: FormattingOptions::default(),
                     work_done_progress_params: WorkDoneProgressParams::default(),
                 })
