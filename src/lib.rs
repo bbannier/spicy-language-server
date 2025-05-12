@@ -260,6 +260,18 @@ mod test {
     }
 
     #[tokio::test]
+    async fn lifecycle() {
+        Server::default()
+            .initialize()
+            .await
+            .unwrap()
+            .0
+            .shutdown()
+            .await
+            .unwrap();
+    }
+
+    #[tokio::test]
     async fn completion() {
         let server = Server::default().initialize().await.unwrap();
 
