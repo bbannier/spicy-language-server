@@ -224,10 +224,12 @@ mod test {
         LanguageServer,
         jsonrpc::Result,
         lsp_types::{
-            CompletionParams, CompletionResponse, DidOpenTextDocumentParams,
-            DocumentFormattingParams, DocumentRangeFormattingParams, FormattingOptions,
-            InitializeParams, PartialResultParams, Position, Range, TextDocumentIdentifier,
-            TextDocumentItem, TextDocumentPositionParams, TextEdit, Url, WorkDoneProgressParams,
+            CompletionParams, CompletionResponse, DidChangeTextDocumentParams,
+            DidOpenTextDocumentParams, DocumentFormattingParams, DocumentRangeFormattingParams,
+            FormattingOptions, InitializeParams, PartialResultParams, Position, Range,
+            TextDocumentContentChangeEvent, TextDocumentIdentifier, TextDocumentItem,
+            TextDocumentPositionParams, TextEdit, Url, VersionedTextDocumentIdentifier,
+            WorkDoneProgressParams,
         },
     };
 
@@ -248,6 +250,10 @@ mod test {
     impl ServerInitialized {
         async fn did_open(&self, params: DidOpenTextDocumentParams) {
             self.0.did_open(params).await
+        }
+
+        async fn did_change(&self, params: DidChangeTextDocumentParams) {
+            self.0.did_change(params).await
         }
 
         async fn completion(&self, params: CompletionParams) -> Result<Option<CompletionResponse>> {
@@ -279,6 +285,46 @@ mod test {
             .shutdown()
             .await
             .unwrap();
+    }
+
+    #[tokio::test]
+    async fn did_change() {
+        let server = Server::default().initialize().await.unwrap();
+
+        let uri = Url::from_file_path("/x.spicy").unwrap();
+
+        server
+            .did_open(DidOpenTextDocumentParams {
+                text_document: TextDocumentItem::new(uri.clone(), "spicy".into(), 0, "".into()),
+            })
+            .await;
+
+        assert_eq!(server.0.state.sources.read().await.get(&uri).unwrap(), "");
+
+        server
+            .did_change(DidChangeTextDocumentParams {
+                text_document: VersionedTextDocumentIdentifier::new(uri.clone(), 1),
+                content_changes: vec![],
+            })
+            .await;
+
+        assert_eq!(server.0.state.sources.read().await.get(&uri).unwrap(), "");
+
+        server
+            .did_change(DidChangeTextDocumentParams {
+                text_document: VersionedTextDocumentIdentifier::new(uri.clone(), 1),
+                content_changes: vec![TextDocumentContentChangeEvent {
+                    text: "foo".into(),
+                    range: None,
+                    range_length: None,
+                }],
+            })
+            .await;
+
+        assert_eq!(
+            server.0.state.sources.read().await.get(&uri).unwrap(),
+            "foo"
+        );
     }
 
     #[tokio::test]
