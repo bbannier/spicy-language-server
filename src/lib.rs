@@ -143,20 +143,15 @@ impl LanguageServer for Lsp {
             .last()
             .map_or((0, 0), |(lines, line)| (lines, line.len()));
 
-        let Ok(formatted) = spicy_format::format(&source, false, true) else {
-            return Ok(None);
-        };
-
-        Ok(Some(vec![TextEdit::new(
-            Range::new(
-                Position::new(0, 0),
-                Position::new(
-                    u32::try_from(num_lines).map_err(|_| Error::internal_error())?,
-                    u32::try_from(num_last_line_chars).map_err(|_| Error::internal_error())?,
-                ),
+        let range = Range::new(
+            Position::new(0, 0),
+            Position::new(
+                u32::try_from(num_lines).map_err(|_| Error::internal_error())?,
+                u32::try_from(num_last_line_chars).map_err(|_| Error::internal_error())?,
             ),
-            formatted,
-        )]))
+        );
+
+        Ok(format(&source).map(|formatted| vec![TextEdit::new(range, formatted)]))
     }
 
     async fn range_formatting(
@@ -186,11 +181,7 @@ impl LanguageServer for Lsp {
             .take(num_lines as usize)
             .join("\n");
 
-        let Ok(formatted) = spicy_format::format(&lines, false, true) else {
-            return Ok(None);
-        };
-
-        Ok(Some(vec![TextEdit::new(params.range, formatted)]))
+        Ok(format(&lines).map(|formatted| vec![TextEdit::new(params.range, formatted)]))
     }
 }
 
@@ -218,6 +209,10 @@ fn keywords() -> Vec<String> {
         .filter(|t| !t.named)
         .map(|t| t.type_)
         .collect()
+}
+
+fn format(source: &str) -> Option<String> {
+    spicy_format::format(source, false, true).ok()
 }
 
 #[cfg(test)]
