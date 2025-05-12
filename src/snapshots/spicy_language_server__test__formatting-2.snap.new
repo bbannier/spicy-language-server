@@ -1,0 +1,8 @@
+---
+source: src/lib.rs
+assertion_line: 445
+expression: "server.formatting(DocumentFormattingParams\n{\n    text_document:\n    TextDocumentIdentifier::new(Url::from_file_path(\"/does_not_exist.spicy\").unwrap()),\n    options: FormattingOptions::default(), work_done_progress_params:\n    WorkDoneProgressParams::default(),\n}).await"
+---
+Ok(
+    None,
+)

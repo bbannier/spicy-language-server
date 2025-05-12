@@ -224,9 +224,10 @@ mod test {
         LanguageServer,
         jsonrpc::Result,
         lsp_types::{
-            CompletionParams, CompletionResponse, DidOpenTextDocumentParams, InitializeParams,
-            PartialResultParams, Position, TextDocumentIdentifier, TextDocumentItem,
-            TextDocumentPositionParams, Url, WorkDoneProgressParams,
+            CompletionParams, CompletionResponse, DidOpenTextDocumentParams,
+            DocumentFormattingParams, FormattingOptions, InitializeParams, PartialResultParams,
+            Position, TextDocumentIdentifier, TextDocumentItem, TextDocumentPositionParams,
+            TextEdit, Url, WorkDoneProgressParams,
         },
     };
 
@@ -251,6 +252,13 @@ mod test {
 
         async fn completion(&self, params: CompletionParams) -> Result<Option<CompletionResponse>> {
             self.0.completion(params).await
+        }
+
+        async fn formatting(
+            &self,
+            params: DocumentFormattingParams,
+        ) -> Result<Option<Vec<TextEdit>>> {
+            self.0.formatting(params).await
         }
     }
 
@@ -363,6 +371,47 @@ uni
                     context: None,
                 })
                 .await
+        );
+    }
+
+    #[tokio::test]
+    async fn formatting() {
+        let server = Server::default().initialize().await.unwrap();
+
+        let uri = Url::from_file_path("/x.spicy").unwrap();
+
+        server
+            .did_open(DidOpenTextDocumentParams {
+                text_document: TextDocumentItem::new(
+                    uri.clone(),
+                    "spicy".into(),
+                    0,
+                    "    module   foo    ;      ".into(),
+                ),
+            })
+            .await;
+
+        assert_debug_snapshot!(
+            server
+                .formatting(DocumentFormattingParams {
+                    text_document: TextDocumentIdentifier::new(uri),
+                    options: FormattingOptions::default(),
+                    work_done_progress_params: WorkDoneProgressParams::default(),
+                })
+                .await
+        );
+
+        assert_eq!(
+            server
+                .formatting(DocumentFormattingParams {
+                    text_document: TextDocumentIdentifier::new(
+                        Url::from_file_path("/does_not_exist.spicy").unwrap()
+                    ),
+                    options: FormattingOptions::default(),
+                    work_done_progress_params: WorkDoneProgressParams::default(),
+                })
+                .await,
+            Ok(None)
         );
     }
 }

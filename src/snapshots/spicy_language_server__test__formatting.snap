@@ -1,0 +1,23 @@
+---
+source: src/lib.rs
+expression: "server.0.formatting(DocumentFormattingParams\n{\n    text_document: TextDocumentIdentifier::new(uri), options:\n    FormattingOptions::default(), work_done_progress_params:\n    WorkDoneProgressParams::default(),\n}).await"
+---
+Ok(
+    Some(
+        [
+            TextEdit {
+                range: Range {
+                    start: Position {
+                        line: 0,
+                        character: 0,
+                    },
+                    end: Position {
+                        line: 0,
+                        character: 27,
+                    },
+                },
+                new_text: "module foo;",
+            },
+        ],
+    ),
+)
