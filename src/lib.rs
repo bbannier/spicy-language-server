@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use itertools::Itertools;
 use serde::Deserialize;
 use tokio::sync::RwLock;
-use tower_lsp::{
+use tower_lsp_server::{
     LanguageServer, LspService, Server,
     jsonrpc::{Error, Result},
     lsp_types::{
@@ -11,7 +11,7 @@ use tower_lsp::{
         CompletionResponse, DidChangeTextDocumentParams, DidOpenTextDocumentParams,
         DocumentFormattingParams, DocumentRangeFormattingParams, InitializeParams,
         InitializeResult, InsertTextFormat, OneOf, Position, Range, ServerCapabilities,
-        TextDocumentItem, TextDocumentSyncCapability, TextDocumentSyncKind, TextEdit, Url,
+        TextDocumentItem, TextDocumentSyncCapability, TextDocumentSyncKind, TextEdit, Uri,
     },
 };
 
@@ -31,7 +31,6 @@ impl Lsp {
     }
 }
 
-#[tower_lsp::async_trait]
 impl LanguageServer for Lsp {
     async fn initialize(&self, _params: InitializeParams) -> Result<InitializeResult> {
         Ok(InitializeResult {
@@ -40,7 +39,7 @@ impl LanguageServer for Lsp {
                     TextDocumentSyncKind::FULL,
                 )),
                 completion_provider: Some(CompletionOptions::default()),
-                document_formatting_provider: Some(tower_lsp::lsp_types::OneOf::Left(true)),
+                document_formatting_provider: Some(OneOf::Left(true)),
                 document_range_formatting_provider: Some(OneOf::Left(true)),
                 ..ServerCapabilities::default()
             },
@@ -187,7 +186,7 @@ impl LanguageServer for Lsp {
 
 #[derive(Default)]
 struct State {
-    sources: RwLock<BTreeMap<Url, String>>,
+    sources: RwLock<BTreeMap<Uri, String>>,
 }
 
 fn keywords() -> Vec<String> {
@@ -220,15 +219,15 @@ mod test {
     use std::u32;
 
     use insta::assert_debug_snapshot;
-    use tower_lsp::{
-        LanguageServer,
+    use tower_lsp_server::{
+        LanguageServer, UriExt,
         jsonrpc::Result,
         lsp_types::{
             CompletionParams, CompletionResponse, DidChangeTextDocumentParams,
             DidOpenTextDocumentParams, DocumentFormattingParams, DocumentRangeFormattingParams,
             FormattingOptions, InitializeParams, PartialResultParams, Position, Range,
             TextDocumentContentChangeEvent, TextDocumentIdentifier, TextDocumentItem,
-            TextDocumentPositionParams, TextEdit, Url, VersionedTextDocumentIdentifier,
+            TextDocumentPositionParams, TextEdit, Uri, VersionedTextDocumentIdentifier,
             WorkDoneProgressParams,
         },
     };
@@ -291,7 +290,7 @@ mod test {
     async fn did_change() {
         let server = Server::default().initialize().await.unwrap();
 
-        let uri = Url::from_file_path("/x.spicy").unwrap();
+        let uri = Uri::from_file_path("/x.spicy").unwrap();
 
         server
             .did_open(DidOpenTextDocumentParams {
@@ -331,7 +330,7 @@ mod test {
     async fn completion() {
         let server = Server::default().initialize().await.unwrap();
 
-        let uri = Url::from_file_path("/x.spicy").unwrap();
+        let uri = Uri::from_file_path("/x.spicy").unwrap();
 
         server
             .did_open(DidOpenTextDocumentParams {
@@ -369,7 +368,7 @@ uni
                 .completion(CompletionParams {
                     text_document_position: TextDocumentPositionParams::new(
                         TextDocumentIdentifier::new(
-                            Url::from_file_path("/does_not_exist.spicy").unwrap()
+                            Uri::from_file_path("/does_not_exist.spicy").unwrap()
                         ),
                         Position::new(u32::MAX, 0),
                     ),
@@ -431,7 +430,7 @@ uni
     async fn formatting() {
         let server = Server::default().initialize().await.unwrap();
 
-        let uri = Url::from_file_path("/x.spicy").unwrap();
+        let uri = Uri::from_file_path("/x.spicy").unwrap();
 
         server
             .did_open(DidOpenTextDocumentParams {
@@ -458,7 +457,7 @@ uni
             server
                 .formatting(DocumentFormattingParams {
                     text_document: TextDocumentIdentifier::new(
-                        Url::from_file_path("/does_not_exist.spicy").unwrap()
+                        Uri::from_file_path("/does_not_exist.spicy").unwrap()
                     ),
                     options: FormattingOptions::default(),
                     work_done_progress_params: WorkDoneProgressParams::default(),
@@ -472,7 +471,7 @@ uni
     async fn range_formatting() {
         let server = Server::default().initialize().await.unwrap();
 
-        let uri = Url::from_file_path("/x.spicy").unwrap();
+        let uri = Uri::from_file_path("/x.spicy").unwrap();
 
         server
             .did_open(DidOpenTextDocumentParams {
@@ -505,7 +504,7 @@ type X =unit (){  };
             server
                 .range_formatting(DocumentRangeFormattingParams {
                     text_document: TextDocumentIdentifier::new(
-                        Url::from_file_path("/does_not_exist.spicy").unwrap()
+                        Uri::from_file_path("/does_not_exist.spicy").unwrap()
                     ),
                     range: Range::new(Position::new(1, 0), Position::new(2, 0)),
                     options: FormattingOptions::default(),
