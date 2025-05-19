@@ -1103,7 +1103,7 @@ dependencies = [
 [[package]]
 name = "spicy-format"
 version = "0.24.2"
-source = "git+https://github.com/bbannier/spicy-format#8b3ab7958e0dd694a4fa4da049052190fa64904c"
+source = "git+https://github.com/bbannier/spicy-format#ecd8470d8fb287d5df153a77dad0b9c8b47c7fb8"
 dependencies = [
  "clap",
  "miette",
