@@ -9,7 +9,7 @@ itertools = "0.14.0"
 serde = { version = "1.0.219", features = ["derive"] }
 serde_json = "1.0.140"
 spicy-format = { git = "https://github.com/bbannier/spicy-format", version = "0.24.2" }
-tokio = { version = "1.45.0", features = ["macros", "rt-multi-thread", "sync", "time", "net", "io-std"] }
+tokio = { version = "1.45.1", features = ["macros", "rt-multi-thread", "sync", "time", "net", "io-std"] }
 tower-lsp-server = "0.21.1"
 tree-sitter-spicy = { git = "https://github.com/bbannier/tree-sitter-spicy", version = "0.0.1" }
 
