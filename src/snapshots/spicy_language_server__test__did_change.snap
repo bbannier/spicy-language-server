@@ -1,0 +1,5 @@
+---
+source: src/lib.rs
+expression: "server.did_change(DidChangeTextDocumentParams\n{\n    text_document: VersionedTextDocumentIdentifier::new(uri.clone(), 1),\n    content_changes: vec![]\n}).await"
+---
+()

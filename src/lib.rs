@@ -10,10 +10,14 @@ use tower_lsp_server::{
         CompletionItem, CompletionItemKind, CompletionOptions, CompletionParams,
         CompletionResponse, DidChangeTextDocumentParams, DidOpenTextDocumentParams,
         DocumentFormattingParams, DocumentRangeFormattingParams, InitializeParams,
-        InitializeResult, InsertTextFormat, OneOf, Position, Range, ServerCapabilities,
-        TextDocumentItem, TextDocumentSyncCapability, TextDocumentSyncKind, TextEdit, Uri,
+        InitializeResult, InsertTextFormat, OneOf, Position, Range, SemanticTokensFullOptions,
+        SemanticTokensOptions, SemanticTokensResult, SemanticTokensServerCapabilities,
+        ServerCapabilities, TextDocumentItem, TextDocumentSyncCapability, TextDocumentSyncKind,
+        TextEdit, Uri,
     },
 };
+
+mod semantic_tokens;
 
 #[derive(Default)]
 pub struct Lsp {
@@ -41,6 +45,15 @@ impl LanguageServer for Lsp {
                 completion_provider: Some(CompletionOptions::default()),
                 document_formatting_provider: Some(OneOf::Left(true)),
                 document_range_formatting_provider: Some(OneOf::Left(true)),
+                semantic_tokens_provider: Some(
+                    SemanticTokensServerCapabilities::SemanticTokensOptions(
+                        SemanticTokensOptions {
+                            legend: semantic_tokens::legend(),
+                            full: Some(SemanticTokensFullOptions::Bool(true)),
+                            ..SemanticTokensOptions::default()
+                        },
+                    ),
+                ),
                 ..ServerCapabilities::default()
             },
             ..InitializeResult::default()
@@ -182,6 +195,22 @@ impl LanguageServer for Lsp {
 
         Ok(format(&lines).map(|formatted| vec![TextEdit::new(params.range, formatted)]))
     }
+
+    async fn semantic_tokens_full(
+        &self,
+        params: tower_lsp_server::lsp_types::SemanticTokensParams,
+    ) -> Result<Option<tower_lsp_server::lsp_types::SemanticTokensResult>> {
+        let uri = params.text_document.uri;
+
+        let sources = self.state.sources.read().await;
+
+        let Some(source) = sources.get(&uri) else {
+            return Ok(None);
+        };
+
+        let legend = semantic_tokens::legend();
+        Ok(semantic_tokens::highlight(source, &legend).map(SemanticTokensResult::Tokens))
+    }
 }
 
 #[derive(Default)]
@@ -225,10 +254,10 @@ mod test {
         lsp_types::{
             CompletionParams, CompletionResponse, DidChangeTextDocumentParams,
             DidOpenTextDocumentParams, DocumentFormattingParams, DocumentRangeFormattingParams,
-            FormattingOptions, InitializeParams, PartialResultParams, Position, Range,
-            TextDocumentContentChangeEvent, TextDocumentIdentifier, TextDocumentItem,
-            TextDocumentPositionParams, TextEdit, Uri, VersionedTextDocumentIdentifier,
-            WorkDoneProgressParams,
+            FormattingOptions, InitializeParams, InitializeResult, PartialResultParams, Position,
+            Range, SemanticTokensParams, SemanticTokensResult, TextDocumentContentChangeEvent,
+            TextDocumentIdentifier, TextDocumentItem, TextDocumentPositionParams, TextEdit, Uri,
+            VersionedTextDocumentIdentifier, WorkDoneProgressParams,
         },
     };
 
@@ -239,38 +268,51 @@ mod test {
 
     impl Server {
         async fn initialize(self) -> Result<ServerInitialized> {
-            let _ = self.0.initialize(InitializeParams::default()).await;
-            Ok(ServerInitialized(self.0))
+            let initialize = self.0.initialize(InitializeParams::default()).await?;
+            Ok(ServerInitialized {
+                lsp: self.0,
+                initialize,
+            })
         }
     }
 
-    struct ServerInitialized(Lsp);
+    struct ServerInitialized {
+        lsp: Lsp,
+        initialize: InitializeResult,
+    }
 
     impl ServerInitialized {
         async fn did_open(&self, params: DidOpenTextDocumentParams) {
-            self.0.did_open(params).await
+            self.lsp.did_open(params).await
         }
 
         async fn did_change(&self, params: DidChangeTextDocumentParams) {
-            self.0.did_change(params).await
+            self.lsp.did_change(params).await
         }
 
         async fn completion(&self, params: CompletionParams) -> Result<Option<CompletionResponse>> {
-            self.0.completion(params).await
+            self.lsp.completion(params).await
         }
 
         async fn formatting(
             &self,
             params: DocumentFormattingParams,
         ) -> Result<Option<Vec<TextEdit>>> {
-            self.0.formatting(params).await
+            self.lsp.formatting(params).await
         }
 
         async fn range_formatting(
             &self,
             params: DocumentRangeFormattingParams,
         ) -> Result<Option<Vec<TextEdit>>> {
-            self.0.range_formatting(params).await
+            self.lsp.range_formatting(params).await
+        }
+
+        async fn semantic_tokens_full(
+            &self,
+            params: SemanticTokensParams,
+        ) -> Result<Option<SemanticTokensResult>> {
+            self.lsp.semantic_tokens_full(params).await
         }
     }
 
@@ -280,7 +322,7 @@ mod test {
             .initialize()
             .await
             .unwrap()
-            .0
+            .lsp
             .shutdown()
             .await
             .unwrap();
@@ -298,7 +340,7 @@ mod test {
             })
             .await;
 
-        assert_eq!(server.0.state.sources.read().await.get(&uri).unwrap(), "");
+        assert_eq!(server.lsp.state.sources.read().await.get(&uri).unwrap(), "");
 
         server
             .did_change(DidChangeTextDocumentParams {
@@ -307,7 +349,7 @@ mod test {
             })
             .await;
 
-        assert_eq!(server.0.state.sources.read().await.get(&uri).unwrap(), "");
+        assert_eq!(server.lsp.state.sources.read().await.get(&uri).unwrap(), "");
 
         server
             .did_change(DidChangeTextDocumentParams {
@@ -321,7 +363,7 @@ mod test {
             .await;
 
         assert_eq!(
-            server.0.state.sources.read().await.get(&uri).unwrap(),
+            server.lsp.state.sources.read().await.get(&uri).unwrap(),
             "foo"
         );
     }
@@ -512,6 +554,40 @@ type X =unit (){  };
                 })
                 .await,
             Ok(None)
+        );
+    }
+
+    #[tokio::test]
+    async fn semantic_tokens_full() {
+        let server = Server::default().initialize().await.unwrap();
+
+        assert_debug_snapshot!(server.initialize.capabilities.semantic_tokens_provider);
+
+        let uri = Uri::from_file_path("/x.spicy").unwrap();
+
+        server
+            .did_open(DidOpenTextDocumentParams {
+                text_document: TextDocumentItem::new(
+                    uri.clone(),
+                    "spicy".into(),
+                    0,
+                    "
+module foo;
+type X = unit {};
+"
+                    .into(),
+                ),
+            })
+            .await;
+
+        assert_debug_snapshot!(
+            server
+                .semantic_tokens_full(SemanticTokensParams {
+                    text_document: TextDocumentIdentifier::new(uri),
+                    work_done_progress_params: WorkDoneProgressParams::default(),
+                    partial_result_params: PartialResultParams::default(),
+                })
+                .await
         );
     }
 }

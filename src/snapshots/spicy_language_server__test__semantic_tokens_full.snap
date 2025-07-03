@@ -1,0 +1,66 @@
+---
+source: src/lib.rs
+expression: server.initialize.capabilities.semantic_tokens_provider
+---
+Some(
+    SemanticTokensOptions(
+        SemanticTokensOptions {
+            work_done_progress_options: WorkDoneProgressOptions {
+                work_done_progress: None,
+            },
+            legend: SemanticTokensLegend {
+                token_types: [
+                    SemanticTokenType(
+                        "comment",
+                    ),
+                    SemanticTokenType(
+                        "function",
+                    ),
+                    SemanticTokenType(
+                        "variable",
+                    ),
+                    SemanticTokenType(
+                        "variable)",
+                    ),
+                    SemanticTokenType(
+                        "keyword",
+                    ),
+                    SemanticTokenType(
+                        "type",
+                    ),
+                    SemanticTokenType(
+                        "property",
+                    ),
+                    SemanticTokenType(
+                        "macro",
+                    ),
+                    SemanticTokenType(
+                        "event",
+                    ),
+                    SemanticTokenType(
+                        "punctuation",
+                    ),
+                    SemanticTokenType(
+                        "number",
+                    ),
+                    SemanticTokenType(
+                        "regexp",
+                    ),
+                    SemanticTokenType(
+                        "string",
+                    ),
+                    SemanticTokenType(
+                        "modifier",
+                    ),
+                ],
+                token_modifiers: [],
+            },
+            range: None,
+            full: Some(
+                Bool(
+                    true,
+                ),
+            ),
+        },
+    ),
+)
