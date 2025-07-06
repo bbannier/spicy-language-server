@@ -1,8 +1,10 @@
+use std::sync::LazyLock;
+
 use itertools::Itertools;
 use tower_lsp_server::lsp_types::{
     Position, Range, SemanticToken, SemanticTokenType, SemanticTokens, SemanticTokensLegend,
 };
-use tree_sitter_highlight::{Highlight, HighlightEvent};
+use tree_sitter_highlight::{Highlight, HighlightConfiguration, HighlightEvent};
 
 pub(crate) fn legend() -> SemanticTokensLegend {
     let token_types = highlights().map(SemanticTokenType::from).collect();
@@ -14,26 +16,31 @@ pub(crate) fn legend() -> SemanticTokensLegend {
 }
 
 fn highlights() -> impl Iterator<Item = &'static str> {
-    tree_sitter_spicy::HIGHLIGHTS_QUERY
-        .lines()
-        .flat_map(|line| line.split_whitespace())
-        .filter_map(|xs| {
-            let xs = xs.strip_prefix('@')?;
-            Some(xs.strip_suffix(')').unwrap_or(xs))
-        })
-        .unique()
+    static SPICY_CONFIG: LazyLock<HighlightConfiguration> =
+        LazyLock::new(|| highlight_config("spicy").expect("'spicy' should be a known language"));
+
+    SPICY_CONFIG.query.capture_names().into_iter().map(|hl| *hl)
+}
+
+fn highlight_config(lang: &str) -> Option<HighlightConfiguration> {
+    match lang {
+        "spicy" => {
+            let language = tree_sitter::Language::new(tree_sitter_spicy::LANGUAGE);
+            tree_sitter_highlight::HighlightConfiguration::new(
+                language,
+                lang,
+                tree_sitter_spicy::HIGHLIGHTS_QUERY,
+                "",
+                "",
+            )
+            .ok()
+        }
+        _ => None,
+    }
 }
 
 pub(crate) fn highlight(source: &str, legend: &SemanticTokensLegend) -> Option<SemanticTokens> {
-    let Ok(mut config) = tree_sitter_highlight::HighlightConfiguration::new(
-        tree_sitter::Language::new(tree_sitter_spicy::LANGUAGE),
-        "spicy",
-        tree_sitter_spicy::HIGHLIGHTS_QUERY,
-        "",
-        "",
-    ) else {
-        return None;
-    };
+    let mut config = highlight_config("spicy")?;
     config.configure(&highlights().collect::<Vec<_>>());
 
     let line_index = line_index::LineIndex::new(source);

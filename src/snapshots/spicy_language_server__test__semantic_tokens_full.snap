@@ -20,9 +20,6 @@ Some(
                         "variable",
                     ),
                     SemanticTokenType(
-                        "variable)",
-                    ),
-                    SemanticTokenType(
                         "keyword",
                     ),
                     SemanticTokenType(
