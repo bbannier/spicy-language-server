@@ -18,8 +18,8 @@ pub(crate) fn legend() -> SemanticTokensLegend {
     }
 }
 
-const SPICY: &'static str = "spicy";
-const REGEX: &'static str = "regex";
+const SPICY: &str = "spicy";
+const REGEX: &str = "regex";
 
 static SPICY_CONFIG: LazyLock<HighlightConfiguration> =
     LazyLock::new(|| config(SPICY).expect("invalid config for 'spicy'"));
