@@ -7,7 +7,10 @@ use tower_lsp_server::lsp_types::{
 use tree_sitter_highlight::{Highlight, HighlightConfiguration, HighlightEvent};
 
 pub(crate) fn legend() -> SemanticTokensLegend {
-    let token_types = highlights().map(SemanticTokenType::from).collect();
+    let token_types = highlights()
+        .iter()
+        .map(|hl| SemanticTokenType::from(*hl))
+        .collect();
 
     SemanticTokensLegend {
         token_types,
@@ -15,21 +18,50 @@ pub(crate) fn legend() -> SemanticTokensLegend {
     }
 }
 
-fn highlights() -> impl Iterator<Item = &'static str> {
-    static SPICY_CONFIG: LazyLock<HighlightConfiguration> =
-        LazyLock::new(|| highlight_config("spicy").expect("'spicy' should be a known language"));
+const SPICY: &'static str = "spicy";
+const REGEX: &'static str = "regex";
 
-    SPICY_CONFIG.query.capture_names().into_iter().map(|hl| *hl)
+static SPICY_CONFIG: LazyLock<HighlightConfiguration> =
+    LazyLock::new(|| config(SPICY).expect("invalid config for 'spicy'"));
+
+static REGEX_CONFIG: LazyLock<HighlightConfiguration> =
+    LazyLock::new(|| config(REGEX).expect("invalid config for 'regex'"));
+
+fn highlights() -> &'static [&'static str] {
+    static ALL: LazyLock<Vec<&str>> = LazyLock::new(|| {
+        (SPICY_CONFIG.query.capture_names().iter())
+            .chain(REGEX_CONFIG.query.capture_names())
+            .copied()
+            // tree-sitter-highlight leaks injection queries, remove it.
+            .filter(|hl| *hl != "injection.content")
+            // LSP does not standardize names with subscopes, preserve only the top-level scope.
+            .map(|hl| hl.split_once('.').map_or(hl, |(hl, _)| hl))
+            .unique()
+            .collect::<Vec<_>>()
+    });
+
+    &ALL
 }
 
-fn highlight_config(lang: &str) -> Option<HighlightConfiguration> {
+fn config(lang: &str) -> Option<HighlightConfiguration> {
     match lang {
-        "spicy" => {
+        SPICY => {
             let language = tree_sitter::Language::new(tree_sitter_spicy::LANGUAGE);
             tree_sitter_highlight::HighlightConfiguration::new(
                 language,
-                lang,
+                SPICY,
                 tree_sitter_spicy::HIGHLIGHTS_QUERY,
+                tree_sitter_spicy::INJECTIONS_QUERY,
+                "",
+            )
+            .ok()
+        }
+        REGEX => {
+            let language = tree_sitter::Language::new(tree_sitter_regex::LANGUAGE);
+            tree_sitter_highlight::HighlightConfiguration::new(
+                language,
+                REGEX,
+                tree_sitter_regex::HIGHLIGHTS_QUERY,
                 "",
                 "",
             )
@@ -39,42 +71,50 @@ fn highlight_config(lang: &str) -> Option<HighlightConfiguration> {
     }
 }
 
+fn highlight_config(lang: &str) -> Option<HighlightConfiguration> {
+    let mut config = config(lang)?;
+
+    config.configure(highlights());
+    Some(config)
+}
+
 pub(crate) fn highlight(source: &str, legend: &SemanticTokensLegend) -> Option<SemanticTokens> {
-    let mut config = highlight_config("spicy")?;
-    config.configure(&highlights().collect::<Vec<_>>());
+    let spicy_config = highlight_config(SPICY)?;
 
     let line_index = line_index::LineIndex::new(source);
 
     let mut data = Vec::new();
 
-    let mut cur = None;
+    let regex_config = highlight_config(REGEX)?;
 
     let mut highlighter = tree_sitter_highlight::Highlighter::new();
     let items = highlighter
-        .highlight(&config, source.as_bytes(), None, |_| None)
+        .highlight(&spicy_config, source.as_bytes(), None, |lang| match lang {
+            REGEX => Some(&regex_config),
+            _ => None,
+        })
         .ok()?;
+
+    let mut labels = Vec::new();
 
     for event in items {
         let Ok(event) = event else { return None };
         match event {
             HighlightEvent::HighlightStart(Highlight(idx)) => {
-                cur = Some((idx, None));
+                labels.push(idx);
             }
             HighlightEvent::Source { start, end } => {
-                if let Some((_, range)) = &mut cur {
-                    *range = Some((start, end));
+                if let Some(idx) = labels.last() {
+                    data.push((*idx, (start, end)));
                 }
             }
             HighlightEvent::HighlightEnd => {
-                if let Some((idx, Some(cur_range))) = cur {
-                    data.push((idx, cur_range));
-                }
-                cur = None;
+                labels.pop();
             }
         }
     }
 
-    let highlight_names: Vec<_> = highlights().collect();
+    let highlight_names = highlights();
     let data: Vec<_> = data
         .into_iter()
         .filter_map(|(ty, range)| {
@@ -135,4 +175,25 @@ pub(crate) fn highlight(source: &str, legend: &SemanticTokensLegend) -> Option<S
         data: tokens,
         ..SemanticTokens::default()
     })
+}
+
+#[cfg(test)]
+mod test {
+    use crate::semantic_tokens::{highlight, legend};
+    use insta::assert_debug_snapshot;
+    use tower_lsp_server::lsp_types::SemanticToken;
+
+    #[test]
+    fn injection_regex() {
+        let legend = legend();
+        let result = highlight("local x = /abc/;", &legend).unwrap();
+        let xs: Vec<_> = result
+            .data
+            .into_iter()
+            .map(|SemanticToken { token_type, .. }| {
+                &legend.token_types[usize::try_from(token_type).unwrap()]
+            })
+            .collect();
+        assert_debug_snapshot!(xs);
+    }
 }

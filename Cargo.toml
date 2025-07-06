@@ -14,6 +14,7 @@ tokio = { version = "1.45.1", features = ["macros", "rt-multi-thread", "sync", "
 tower-lsp-server = "0.22.0"
 tree-sitter = "0.25.6"
 tree-sitter-highlight = "0.25.6"
+tree-sitter-regex = "0.24.3"
 tree-sitter-spicy = { git = "https://github.com/bbannier/tree-sitter-spicy", version = "0.0.1" }
 
 [profile.release]

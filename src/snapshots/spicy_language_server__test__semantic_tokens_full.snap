@@ -49,6 +49,18 @@ Some(
                     SemanticTokenType(
                         "modifier",
                     ),
+                    SemanticTokenType(
+                        "escape",
+                    ),
+                    SemanticTokenType(
+                        "operator",
+                    ),
+                    SemanticTokenType(
+                        "character",
+                    ),
+                    SemanticTokenType(
+                        "constant",
+                    ),
                 ],
                 token_modifiers: [],
             },

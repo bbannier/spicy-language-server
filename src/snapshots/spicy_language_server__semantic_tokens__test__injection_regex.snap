@@ -1,0 +1,27 @@
+---
+source: src/semantic_tokens.rs
+expression: xs
+---
+[
+    SemanticTokenType(
+        "keyword",
+    ),
+    SemanticTokenType(
+        "variable",
+    ),
+    SemanticTokenType(
+        "regexp",
+    ),
+    SemanticTokenType(
+        "string",
+    ),
+    SemanticTokenType(
+        "string",
+    ),
+    SemanticTokenType(
+        "string",
+    ),
+    SemanticTokenType(
+        "regexp",
+    ),
+]
