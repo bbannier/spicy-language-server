@@ -50,16 +50,25 @@ Some(
                         "modifier",
                     ),
                     SemanticTokenType(
-                        "escape",
+                        "embedded",
                     ),
                     SemanticTokenType(
                         "operator",
                     ),
                     SemanticTokenType(
+                        "constant",
+                    ),
+                    SemanticTokenType(
+                        "none",
+                    ),
+                    SemanticTokenType(
+                        "escape",
+                    ),
+                    SemanticTokenType(
                         "character",
                     ),
                     SemanticTokenType(
-                        "constant",
+                        "boolean",
                     ),
                 ],
                 token_modifiers: [],

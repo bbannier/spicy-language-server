@@ -1,0 +1,18 @@
+---
+source: src/semantic_tokens.rs
+expression: xs
+---
+[
+    SemanticTokenType(
+        "comment",
+    ),
+    SemanticTokenType(
+        "macro",
+    ),
+    SemanticTokenType(
+        "none",
+    ),
+    SemanticTokenType(
+        "function",
+    ),
+]

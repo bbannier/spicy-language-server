@@ -15,7 +15,11 @@ tower-lsp-server = "0.22.0"
 tree-sitter = "0.25.6"
 tree-sitter-highlight = "0.25.6"
 tree-sitter-regex = "0.24.3"
-tree-sitter-spicy = { git = "https://github.com/bbannier/tree-sitter-spicy", version = "0.0.1" }
+tree-sitter-btest = { git = "https://github.com/bbannier/tree-sitter-btest" }
+tree-sitter-spicy = { git = "https://github.com/bbannier/tree-sitter-spicy" }
+tree-sitter-printf = "0.5.0"
+tree-sitter-bash = "0.25.0"
+thiserror = "2.0.12"
 
 [profile.release]
 panic = "abort"

@@ -1166,10 +1166,14 @@ dependencies = [
  "serde",
  "serde_json",
  "spicy-format",
+ "thiserror",
  "tokio",
  "tower-lsp-server",
  "tree-sitter",
+ "tree-sitter-bash",
+ "tree-sitter-btest",
  "tree-sitter-highlight",
+ "tree-sitter-printf",
  "tree-sitter-regex",
  "tree-sitter-spicy",
 ]
@@ -1511,6 +1515,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "tree-sitter-bash"
+version = "0.25.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "871b0606e667e98a1237ebdc1b0d7056e0aebfdc3141d12b399865d4cb6ed8a6"
+dependencies = [
+ "cc",
+ "tree-sitter-language",
+]
+
+[[package]]
+name = "tree-sitter-btest"
+version = "0.1.0"
+source = "git+https://github.com/bbannier/tree-sitter-btest#e1cd8e552085589169b29915687d9a93f3275a4e"
+dependencies = [
+ "cc",
+ "tree-sitter-language",
+]
+
+[[package]]
 name = "tree-sitter-highlight"
 version = "0.25.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1529,6 +1552,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c4013970217383f67b18aef68f6fb2e8d409bc5755227092d32efb0422ba24b8"
 
 [[package]]
+name = "tree-sitter-printf"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7b83e4b6cb564318c486180bc6e59889bf990d97def220a1a847edaa85cc7922"
+dependencies = [
+ "cc",
+ "tree-sitter-language",
+]
+
+[[package]]
 name = "tree-sitter-regex"
 version = "0.24.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1541,7 +1574,7 @@ dependencies = [
 [[package]]
 name = "tree-sitter-spicy"
 version = "0.0.1"
-source = "git+https://github.com/bbannier/tree-sitter-spicy#0ce2657a50ddc3519dfbcb23840c2e90235e43c9"
+source = "git+https://github.com/bbannier/tree-sitter-spicy#f38ccf14c5b7613f06e6e53ae1529cfa1990a0c2"
 dependencies = [
  "cc",
  "tree-sitter-language",
