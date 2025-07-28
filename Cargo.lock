@@ -1144,7 +1144,7 @@ dependencies = [
 [[package]]
 name = "spicy-format"
 version = "0.25.0"
-source = "git+https://github.com/bbannier/spicy-format#61c91bcb921c3a972e8e2b448307481b112b57cf"
+source = "git+https://github.com/bbannier/spicy-format#b49d09717f1b951870ad21c6c45a3241fb6ed6f0"
 dependencies = [
  "clap",
  "miette",
@@ -1574,7 +1574,7 @@ dependencies = [
 [[package]]
 name = "tree-sitter-spicy"
 version = "0.0.1"
-source = "git+https://github.com/bbannier/tree-sitter-spicy#dcb1d9afed3cd49ebf5176d3bb0123ba0b58e13e"
+source = "git+https://github.com/bbannier/tree-sitter-spicy#12887a9f497cf280c742b2cd92da0971d9f48010"
 dependencies = [
  "cc",
  "tree-sitter-language",
