@@ -19,7 +19,7 @@ tree-sitter-btest = { git = "https://github.com/bbannier/tree-sitter-btest" }
 tree-sitter-spicy = { git = "https://github.com/bbannier/tree-sitter-spicy" }
 tree-sitter-printf = "0.5.1"
 tree-sitter-bash = "0.25.0"
-thiserror = "2.0.12"
+thiserror = "2.0.15"
 
 [profile.release]
 panic = "abort"
