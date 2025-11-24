@@ -36,4 +36,4 @@ clone_on_ref_ptr = "deny"
 redundant_clone = "deny"
 
 [dev-dependencies]
-insta = "1.43.2"
+insta = "1.44.1"
