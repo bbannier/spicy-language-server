@@ -2,7 +2,7 @@ use std::sync::LazyLock;
 
 use itertools::Itertools;
 use thiserror::Error;
-use tower_lsp_server::lsp_types::{
+use tower_lsp_server::ls_types::{
     Position, Range, SemanticToken, SemanticTokenType, SemanticTokens, SemanticTokensLegend,
 };
 use tree_sitter::QueryError;
@@ -246,7 +246,7 @@ pub(crate) fn highlight(source: &str, legend: &SemanticTokensLegend) -> Option<S
 mod test {
     use crate::semantic_tokens::{highlight, legend};
     use insta::assert_debug_snapshot;
-    use tower_lsp_server::lsp_types::SemanticToken;
+    use tower_lsp_server::ls_types::SemanticToken;
 
     #[test]
     fn injection_regex() {
