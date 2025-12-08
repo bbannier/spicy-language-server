@@ -6,7 +6,7 @@ use tokio::sync::RwLock;
 use tower_lsp_server::{
     LanguageServer, LspService, Server,
     jsonrpc::{Error, Result},
-    lsp_types::{
+    ls_types::{
         CompletionItem, CompletionItemKind, CompletionOptions, CompletionParams,
         CompletionResponse, DidChangeTextDocumentParams, DidOpenTextDocumentParams,
         DocumentFormattingParams, DocumentRangeFormattingParams, InitializeParams,
@@ -198,8 +198,8 @@ impl LanguageServer for Lsp {
 
     async fn semantic_tokens_full(
         &self,
-        params: tower_lsp_server::lsp_types::SemanticTokensParams,
-    ) -> Result<Option<tower_lsp_server::lsp_types::SemanticTokensResult>> {
+        params: tower_lsp_server::ls_types::SemanticTokensParams,
+    ) -> Result<Option<tower_lsp_server::ls_types::SemanticTokensResult>> {
         let uri = params.text_document.uri;
 
         let sources = self.state.sources.read().await;
@@ -249,9 +249,9 @@ mod test {
 
     use insta::assert_debug_snapshot;
     use tower_lsp_server::{
-        LanguageServer, UriExt,
+        LanguageServer,
         jsonrpc::Result,
-        lsp_types::{
+        ls_types::{
             CompletionParams, CompletionResponse, DidChangeTextDocumentParams,
             DidOpenTextDocumentParams, DocumentFormattingParams, DocumentRangeFormattingParams,
             FormattingOptions, InitializeParams, InitializeResult, PartialResultParams, Position,
