@@ -19,7 +19,33 @@ Ok(
                     sort_text: None,
                     filter_text: None,
                     insert_text: Some(
-                        "type ${1:X} = unit {\n    ${2:a}: ${3:uint8};\n};\n",
+                        "type ${1:X} = unit {\n    ${2:a}: ${3:uint8};\n};",
+                    ),
+                    insert_text_format: Some(
+                        Snippet,
+                    ),
+                    insert_text_mode: None,
+                    text_edit: None,
+                    additional_text_edits: None,
+                    command: None,
+                    commit_characters: None,
+                    data: None,
+                    tags: None,
+                },
+                CompletionItem {
+                    label: "struct",
+                    label_details: None,
+                    kind: Some(
+                        Snippet,
+                    ),
+                    detail: None,
+                    documentation: None,
+                    deprecated: None,
+                    preselect: None,
+                    sort_text: None,
+                    filter_text: None,
+                    insert_text: Some(
+                        "type ${1:X} = unit {\n    ${2:a}: ${3:uint8};\n};",
                     ),
                     insert_text_format: Some(
                         Snippet,

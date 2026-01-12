@@ -96,13 +96,20 @@ impl LanguageServer for Lsp {
             return Ok(None);
         };
 
-        let snippets = [(
-            "unit",
-            "type ${1:X} = unit {
+        let snippets = [
+            (
+                "unit",
+                "type ${1:X} = unit {
     ${2:a}: ${3:uint8};
-};
-",
-        )];
+};",
+            ),
+            (
+                "struct",
+                "type ${1:X} = unit {
+    ${2:a}: ${3:uint8};
+};",
+            ),
+        ];
 
         let completions: Vec<_> = snippets
             .iter()
