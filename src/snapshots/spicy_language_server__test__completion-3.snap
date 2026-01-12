@@ -7,7 +7,7 @@ Ok(
         Array(
             [
                 CompletionItem {
-                    label: "unit",
+                    label: "struct",
                     label_details: None,
                     kind: Some(
                         Snippet,
@@ -33,7 +33,7 @@ Ok(
                     tags: None,
                 },
                 CompletionItem {
-                    label: "struct",
+                    label: "unit",
                     label_details: None,
                     kind: Some(
                         Snippet,

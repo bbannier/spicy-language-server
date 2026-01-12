@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use itertools::Itertools;
 use serde::Deserialize;
@@ -96,7 +96,7 @@ impl LanguageServer for Lsp {
             return Ok(None);
         };
 
-        let snippets = [
+        let snippets: BTreeMap<_, _> = [
             (
                 "unit",
                 "type ${1:X} = unit {
@@ -109,20 +109,20 @@ impl LanguageServer for Lsp {
     ${2:a}: ${3:uint8};
 };",
             ),
-        ];
+        ]
+        .into_iter()
+        .collect();
 
         let completions: Vec<_> = snippets
             .iter()
-            .filter_map(|s| {
-                let (key, snippet) = *s;
-
+            .filter_map(|(key, snippet)| {
                 if !key.contains(trigger) {
                     return None;
                 }
 
                 Some(CompletionItem {
-                    label: key.into(),
-                    insert_text: Some(snippet.into()),
+                    label: key.to_string(),
+                    insert_text: Some(snippet.to_string()),
                     kind: Some(CompletionItemKind::SNIPPET),
                     insert_text_format: Some(InsertTextFormat::SNIPPET),
                     ..CompletionItem::default()
@@ -228,7 +228,7 @@ struct State {
     sources: RwLock<BTreeMap<Uri, String>>,
 }
 
-fn keywords() -> Vec<String> {
+fn keywords() -> BTreeSet<String> {
     #[derive(Deserialize, Debug)]
     #[allow(dead_code)]
     struct NodeType {
@@ -239,7 +239,7 @@ fn keywords() -> Vec<String> {
 
     let Ok(node_types) = serde_json::from_str::<Vec<NodeType>>(tree_sitter_spicy::NODE_TYPES)
     else {
-        return Vec::default();
+        return BTreeSet::default();
     };
 
     node_types
