@@ -170,7 +170,10 @@ impl LanguageServer for Lsp {
             ),
         );
 
-        Ok(format(&source).map(|formatted| vec![TextEdit::new(range, formatted)]))
+        Ok(
+            format(&source)
+                .map(|formatted| vec![TextEdit::new(range, formatted.trim_end().into())]),
+        )
     }
 
     async fn range_formatting(
