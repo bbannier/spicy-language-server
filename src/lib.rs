@@ -115,6 +115,13 @@ impl LanguageServer for Lsp {
     ${4:return arg;}
 }",
             ),
+            ("module", "module ${1:mod};\n\n"),
+            (
+                "for",
+                "for (${1:x} in ${2:xs}) {
+    ${3:# code}
+}",
+            ),
         ]
         .into_iter()
         .collect();
