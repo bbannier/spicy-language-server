@@ -7,6 +7,32 @@ Ok(
         Array(
             [
                 CompletionItem {
+                    label: "function",
+                    label_details: None,
+                    kind: Some(
+                        Snippet,
+                    ),
+                    detail: None,
+                    documentation: None,
+                    deprecated: None,
+                    preselect: None,
+                    sort_text: None,
+                    filter_text: None,
+                    insert_text: Some(
+                        "function ${1:fun}(${2:arg: uint8})${3:: uint8} {\n    ${4:return arg;}\n}",
+                    ),
+                    insert_text_format: Some(
+                        Snippet,
+                    ),
+                    insert_text_mode: None,
+                    text_edit: None,
+                    additional_text_edits: None,
+                    command: None,
+                    commit_characters: None,
+                    data: None,
+                    tags: None,
+                },
+                CompletionItem {
                     label: "struct",
                     label_details: None,
                     kind: Some(

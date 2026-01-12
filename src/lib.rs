@@ -109,6 +109,12 @@ impl LanguageServer for Lsp {
     ${2:a}: ${3:uint8};
 };",
             ),
+            (
+                "function",
+                "function ${1:fun}(${2:arg: uint8})${3:: uint8} {
+    ${4:return arg;}
+}",
+            ),
         ]
         .into_iter()
         .collect();
