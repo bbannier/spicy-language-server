@@ -12,7 +12,7 @@ serde_json = "1.0.149"
 spicy-format = { git = "https://github.com/bbannier/spicy-format", version = "0.27.2" }
 tokio = { version = "1.49.0", features = ["macros", "rt-multi-thread", "sync", "time", "net", "io-std"] }
 tower-lsp-server = "0.23.0"
-tree-sitter = "0.26.3"
+tree-sitter = "0.26.5"
 tree-sitter-highlight = "0.26.3"
 tree-sitter-regex = "0.25.0"
 tree-sitter-btest = { git = "https://github.com/bbannier/tree-sitter-btest" }
