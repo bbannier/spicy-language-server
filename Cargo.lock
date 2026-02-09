@@ -112,9 +112,9 @@ checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 
 [[package]]
 name = "clap"
-version = "4.5.54"
+version = "4.5.57"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c6e6ff9dcd79cff5cd969a17a545d79e84ab086e444102a591e288a8aa3ce394"
+checksum = "6899ea499e3fb9305a65d5ebf6e3d2248c5fab291f300ad0a704fbe142eae31a"
 dependencies = [
  "clap_builder",
  "clap_derive",
@@ -122,9 +122,9 @@ dependencies = [
 
 [[package]]
 name = "clap_builder"
-version = "4.5.54"
+version = "4.5.57"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fa42cf4d2b7a41bc8f663a7cab4031ebafa1bf3875705bfaf8466dc60ab52c00"
+checksum = "7b12c8b680195a62a8364d16b8447b01b6c2c8f9aaf68bee653be34d4245e238"
 dependencies = [
  "anstyle",
  "clap_lex",
@@ -132,9 +132,9 @@ dependencies = [
 
 [[package]]
 name = "clap_derive"
-version = "4.5.49"
+version = "4.5.55"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2a0b5487afeab2deb2ff4e03a807ad1a03ac532ff5a2cee5d86884440c7f7671"
+checksum = "a92793da1a46a5f2a02a6f4c46c6496b28c43638adea8306fcb0caa1634f24e5"
 dependencies = [
  "heck",
  "proc-macro2",
@@ -1162,7 +1162,7 @@ dependencies = [
 [[package]]
 name = "spicy-format"
 version = "0.27.2"
-source = "git+https://github.com/bbannier/spicy-format#c06311fd90f110030e2654ff8545de677ade825f"
+source = "git+https://github.com/bbannier/spicy-format#e2496a84199e989dc712e6da6fe1021e3acca7ec"
 dependencies = [
  "clap",
  "miette",
@@ -1604,7 +1604,7 @@ dependencies = [
 [[package]]
 name = "tree-sitter-spicy"
 version = "0.0.1"
-source = "git+https://github.com/bbannier/tree-sitter-spicy#94dc682ca01fb4a2cc388b8482c00c04d8189f88"
+source = "git+https://github.com/bbannier/tree-sitter-spicy#85150dfaf0eb247d912f3beaa2b0fa1cca063dab"
 dependencies = [
  "cc",
  "tree-sitter-language",
