@@ -5,6 +5,7 @@ edition = "2024"
 license = "GPL-3.0-only"
 
 [dependencies]
+dashmap = "6.1.0"
 itertools = "0.14.0"
 line-index = "0.1.2"
 serde = { version = "1.0.228", features = ["derive"] }

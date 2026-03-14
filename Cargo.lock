@@ -1178,6 +1178,7 @@ dependencies = [
 name = "spicy-language-server"
 version = "0.1.0"
 dependencies = [
+ "dashmap",
  "insta",
  "itertools 0.14.0",
  "line-index",
@@ -1237,9 +1238,9 @@ checksum = "b7401a30af6cb5818bb64852270bb722533397edcfc7344954a38f420819ece2"
 
 [[package]]
 name = "syn"
-version = "2.0.101"
+version = "2.0.117"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8ce2b7fc941b3a24138a0a7cf8e858bfc6a992e7978a068a5c760deb0ed43caf"
+checksum = "e665b8803e7b1d2a727f4023456bbbbe74da67099c585258af0ad9c5013b9b99"
 dependencies = [
  "proc-macro2",
  "quote",

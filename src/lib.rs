@@ -1,8 +1,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 
+use dashmap::DashMap;
 use itertools::Itertools;
 use serde::Deserialize;
-use tokio::sync::RwLock;
 use tower_lsp_server::{
     LanguageServer, LspService, Server,
     jsonrpc::{Error, Result},
@@ -21,7 +21,7 @@ mod semantic_tokens;
 
 #[derive(Default)]
 pub struct Lsp {
-    state: State,
+    sources: DashMap<Uri, String>,
 }
 
 impl Lsp {
@@ -66,8 +66,7 @@ impl LanguageServer for Lsp {
 
     async fn did_open(&self, params: DidOpenTextDocumentParams) {
         let TextDocumentItem { uri, text, .. } = params.text_document;
-        let mut sources = self.state.sources.write().await;
-        sources.insert(uri, text);
+        self.sources.insert(uri, text);
     }
 
     async fn did_change(&self, params: DidChangeTextDocumentParams) {
@@ -78,17 +77,14 @@ impl LanguageServer for Lsp {
 
         let uri = params.text_document.uri;
 
-        let mut sources = self.state.sources.write().await;
-        sources.insert(uri, changes.text);
+        self.sources.insert(uri, changes.text);
     }
 
     async fn completion(&self, params: CompletionParams) -> Result<Option<CompletionResponse>> {
         let uri = params.text_document_position.text_document.uri;
         let position = params.text_document_position.position;
 
-        let sources = self.state.sources.read().await;
-
-        let Some(source) = sources.get(&uri) else {
+        let Some(source) = self.sources.get(&uri) else {
             return Ok(None);
         };
 
@@ -161,10 +157,7 @@ impl LanguageServer for Lsp {
     async fn formatting(&self, params: DocumentFormattingParams) -> Result<Option<Vec<TextEdit>>> {
         let uri = params.text_document.uri;
 
-        let source = {
-            let sources = self.state.sources.read().await;
-            sources.get(&uri).cloned()
-        };
+        let source = self.sources.get(&uri);
         let Some(source) = source else {
             return Ok(None);
         };
@@ -195,10 +188,7 @@ impl LanguageServer for Lsp {
     ) -> Result<Option<Vec<TextEdit>>> {
         let uri = params.text_document.uri;
 
-        let source = {
-            let sources = self.state.sources.read().await;
-            sources.get(&uri).cloned()
-        };
+        let source = self.sources.get(&uri);
         let Some(source) = source else {
             return Ok(None);
         };
@@ -225,20 +215,13 @@ impl LanguageServer for Lsp {
     ) -> Result<Option<tower_lsp_server::ls_types::SemanticTokensResult>> {
         let uri = params.text_document.uri;
 
-        let sources = self.state.sources.read().await;
-
-        let Some(source) = sources.get(&uri) else {
+        let Some(source) = self.sources.get(&uri) else {
             return Ok(None);
         };
 
         let legend = semantic_tokens::legend();
-        Ok(semantic_tokens::highlight(source, &legend).map(SemanticTokensResult::Tokens))
+        Ok(semantic_tokens::highlight(source.as_str(), &legend).map(SemanticTokensResult::Tokens))
     }
-}
-
-#[derive(Default)]
-struct State {
-    sources: RwLock<BTreeMap<Uri, String>>,
 }
 
 fn keywords() -> BTreeSet<String> {
@@ -363,7 +346,7 @@ mod test {
             })
             .await;
 
-        assert_eq!(server.lsp.state.sources.read().await.get(&uri).unwrap(), "");
+        assert_eq!(server.lsp.sources.get(&uri).unwrap().as_str(), "");
 
         server
             .did_change(DidChangeTextDocumentParams {
@@ -372,7 +355,7 @@ mod test {
             })
             .await;
 
-        assert_eq!(server.lsp.state.sources.read().await.get(&uri).unwrap(), "");
+        assert_eq!(server.lsp.sources.get(&uri).unwrap().as_str(), "");
 
         server
             .did_change(DidChangeTextDocumentParams {
@@ -385,10 +368,7 @@ mod test {
             })
             .await;
 
-        assert_eq!(
-            server.lsp.state.sources.read().await.get(&uri).unwrap(),
-            "foo"
-        );
+        assert_eq!(server.lsp.sources.get(&uri).unwrap().as_str(), "foo");
     }
 
     #[tokio::test]
