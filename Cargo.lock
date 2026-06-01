@@ -1604,7 +1604,7 @@ dependencies = [
 [[package]]
 name = "tree-sitter-spicy"
 version = "0.0.1"
-source = "git+https://github.com/bbannier/tree-sitter-spicy#5ddcff4bdb005ddc4026344385eb81860a180d33"
+source = "git+https://github.com/bbannier/tree-sitter-spicy#1e484203d810616576b5130d7148844d6d979801"
 dependencies = [
  "cc",
  "tree-sitter-language",
