@@ -49,5 +49,5 @@ jobs:
       - uses: moonrepo/setup-rust@v1
         with:
           components: clippy,rustfmt
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
       - uses: j178/prek-action@e98a699c41eb69ab013a45817a0406469a748f8d
