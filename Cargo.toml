@@ -35,6 +35,7 @@ missing_errors_doc = "allow"
 ignored_unit_patterns = "deny"
 clone_on_ref_ptr = "deny"
 redundant_clone = "deny"
+unused_async_trait_impl = "allow"
 
 [dev-dependencies]
 insta = "1.47.2"
