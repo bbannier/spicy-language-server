@@ -251,8 +251,6 @@ fn format(source: &str) -> Option<String> {
 
 #[cfg(test)]
 mod test {
-    use std::u32;
-
     use insta::assert_debug_snapshot;
     use tower_lsp_server::{
         LanguageServer,
