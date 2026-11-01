@@ -50,4 +50,4 @@ jobs:
         with:
           components: clippy,rustfmt
       - uses: actions/setup-python@v7
-      - uses: j178/prek-action@4e14d07f9231acabce116ccfca13b13dd9755ece
+      - uses: j178/prek-action@44924fe9ef4a6f88253c4b6b1bf11c689d3ce53d
